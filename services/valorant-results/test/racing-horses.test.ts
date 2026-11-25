@@ -379,3 +379,26 @@ test('Fujimura SQL-like horse name is invited once to the next race, announced, 
  assert.equal(horse.name,dangerousName);
  assert.equal(horse.races,1,'normal horse settlement updates the real record exactly once');
 });
+
+
+test('Fujimura late namesake races award zero owner KP including consolation, with repeat settlement idempotent',async t=>{
+ const f=await fixture(100000);
+ const race=Date.parse('2026-11-16T01:15:00+09:00');
+ f.sql.exec("CREATE TABLE IF NOT EXISTS kp_crowns(guild TEXT NOT NULL,race INTEGER NOT NULL,name TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL,source TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,PRIMARY KEY(guild,race))");
+ f.sql.prepare("INSERT INTO kp_crowns VALUES(?,?,?,?,'fujimura20','fujimura-test-hour-1',0)").run(guild,race,'藤村遅刻1,200秒・時空歪曲ステークス',two);
+ t.mock.timers.enable({apis:['Date'],now:race-RACE_INTERVAL+30000});
+ const entries=await decideEntries(f.env,mapping,race,race-RACE_INTERVAL+30000);
+ assert.equal(entries[0]?.name,'藤村号');
+ assert.equal(entries[0]?.horseId,'person-'+two);
+ const card=raceCard(race,undefined,entries),number=card.horses.find((h:{person?:boolean})=>h.person)!.number;
+ await operateKp(f.env,mapping,one,'race-bet-fujimura-late-1','race-bet',{raceId:race,type:'place',horse:number,amount:2000});
+ t.mock.timers.setTime(race+RUN_MS);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS);
+ const receipt=f.sql.prepare('SELECT prize FROM kp_horse_results WHERE guild=? AND race=? AND horse=?').get(guild,race,'person-'+two);
+ assert.equal(receipt?.prize,0,'the namesake receives neither placing prize nor the usual 5% consolation');
+ assert.equal(balance(f.sql,two),0,'the target wallet must not gain KP');
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
+ assert.equal(balance(f.sql,two),0,'retry must not credit namesake');
+ const bet=f.sql.prepare("SELECT json_extract(value,'$.status') AS status FROM kp_state s,json_each(s.data,'$.raceBets') WHERE s.user=? AND json_extract(value,'$.raceId')=?").get(one,race);
+ assert.ok(bet,'unrelated player bets remain stored');
+});

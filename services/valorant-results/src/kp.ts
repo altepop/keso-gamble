@@ -1,3 +1,4 @@
+import {ensureDirectiveLifecycle,completeDirectiveMatch} from './kp-directive-lifecycle.ts';
 import type {EscalationPowerProof} from './escalation-rating.ts';
 import {ensureEscalationRating,escalationPowerProof,escalationPowerStatement,syncEscalationPower,invalidateEscalationBoard,ESCALATION_RATING_POLICY} from './escalation-rating.ts';
 import {feedIndex} from './community-feed.ts';
@@ -14,12 +15,13 @@ import type {SpikeMatch} from './spikerush-growth.ts';
 import policy from '../legacy-kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
+import extraSealed from '../kp-extra-accounts.encrypted.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
 import { borrowShortfall, borrowedBy, debtNote, ensureDebt } from './kp-debt.ts';
 import type { Match } from './results.ts';
-export interface KpEnv { STEAM_WEB_API_KEY?:string; KP_STEAM_CONFIG?:string; KP_LOOP_REWARDS_CONFIG?:string; KP_PRIVATE_CASINO_CONFIG?:string; RACE_BROADCAST?:DurableObjectNamespace; VOICE_GATEWAY?:DurableObjectNamespace; DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
+export interface KpEnv { STEAM_WEB_API_KEY?:string; KP_STEAM_CONFIG?:string; KP_LOOP_REWARDS_CONFIG?:string; KP_PRIVATE_CASINO_CONFIG?:string; RACE_BROADCAST?:DurableObjectNamespace; VOICE_GATEWAY?:DurableObjectNamespace; DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string; HENRIK_API_KEY?:string }
 export interface KpMapping { guildId:string; accounts:Array<{riotId:string;discordUserId:string}> }
 export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)`,
@@ -86,7 +88,27 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
  if(!policy.enabled||(!env.KP_BOOTSTRAP_PRIVATE_KEY&&!override))return null;
  if(!override&&setups.has(env.DB))return setups.get(env.DB)!;
  const job=(async()=>{
-  const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+  const mapping=override??await (async()=>{
+   // The original four accounts stay encrypted and untouched. The additional
+   // account is an independently encrypted, same-key addendum; never store
+   // private Discord/Riot links in plain source or replace the base envelope.
+   const base=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+   // An invalid addendum must NEVER disable KP for the four existing players.
+   // Reject unexpected IDs / reused owners rather than awarding the wrong account.
+   try {
+    if(extraSealed.keyFingerprint!==sealed.keyFingerprint || extraSealed.version!==1)throw Error('Addendum key mismatch');
+    const extra=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!,extraSealed);
+    if(!Array.isArray(extra.accounts)||extra.accounts.length!==1||(extra.guildId&&extra.guildId!==base.guildId))
+      throw Error('Invalid addendum account count or guild');
+    const account=extra.accounts[0];
+    if(account.riotId?.toLowerCase()!=='mecael#2489'||!/^\d{15,22}$/.test(account.discordUserId)||base.accounts.some(a=>a.riotId.toLowerCase()===account.riotId.toLowerCase()||a.discordUserId===account.discordUserId))
+      throw Error('Unexpected account ID or already-linked owner');
+    return {...base,accounts:[...base.accounts,account]};
+   } catch {
+    console.warn('kp_addendum_unavailable_existing_accounts_preserved');
+    return base;
+   }
+  })();
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
   const version=await kpSchemaVersion(env);
@@ -97,6 +119,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
     env.DB.prepare("INSERT OR REPLACE INTO kp_settings VALUES('schema_version','1')"),
    ]);
   }
+  await ensureDirectiveLifecycle(env);
   await env.DB.prepare(feedIndex).run();
   // The personal wallet ledger previously scanned ~1,137 rows per request
   // (D1 Insights, 2026-10-31). Optimize the exact WHERE and ORDER BY of
@@ -288,12 +311,12 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const powerColumns=status.mode==='escalation'?`,e.policy AS power_policy,CASE WHEN e.policy='${ESCALATION_RATING_POLICY}' THEN EXISTS(SELECT 1 FROM kp_escalation_power_matches r WHERE r.id=e.id) ELSE 1 END AS power_done`:'';
  const link=await env.DB.prepare(`SELECT a.user,a.linked_at,s.value AS starts_at,e.amount${powerColumns} FROM kp_accounts a JOIN kp_settings s ON s.key='starts_at' LEFT JOIN kp_events e ON e.id=? WHERE a.guild=? AND a.puuid=?`).bind(id,mapping.guildId,puuid).first<{user:string;linked_at:number;starts_at:string;amount:number|null;power_policy?:string;power_done?:number}>();
  if(!link||!mapping.accounts.some(a=>a.discordUserId===link.user)||start<Math.max(Number(link.starts_at),link.linked_at))return null;
- await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task=? AND status='active' AND at<=?").bind(mapping.guildId,link.user,status.mode,start).run();
+ if(status.mode==='competitive'||status.mode==='unrated')await completeDirectiveMatch(env,mapping,link.user,status.mode,start,start+duration,raw.metadata.match_id);
  const subject=raw.players.find(p=>p.puuid===puuid);
  // A missing party identifier cannot prove solo queueing.
  const solo=typeof subject?.party_id==='string'&&subject.party_id.length>0&&raw.players.filter(p=>p.team_id===subject.team_id).every(p=>typeof p.party_id==='string'&&p.party_id.length>0)&&raw.players.filter(p=>p.party_id===subject.party_id).length===1;
- if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
- if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
+ if(solo&&status.mode==='competitive')await completeDirectiveMatch(env,mapping,link.user,'solo_competitive',start,start+duration,raw.metadata.match_id);
+ if(solo&&status.mode==='unrated')await completeDirectiveMatch(env,mapping,link.user,'solo_death_unrated',start,start+duration,raw.metadata.match_id,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId);
  if(link.amount!==null){
   if(link.power_policy===ESCALATION_RATING_POLICY&&!link.power_done)await syncEscalationPower(env,mapping.guildId,link.user,id,raw,puuid);
   return kpMatchNet(env,id);
@@ -353,7 +376,7 @@ export async function kpSession(env:KpEnv,token:string){
 export async function revokeKpSession(env:KpEnv,token:string){await env.DB.prepare('DELETE FROM kp_sessions WHERE hash=?').bind(await kpHash(token)).run();}
 
 export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;KP_EARNINGS_WEBHOOK_URL?:string},mapping:KpMapping){
- const rows=(await env.DB.prepare("SELECT d.id,d.issuer,d.target,d.task,d.cost,d.status FROM kp_directives d LEFT JOIN kp_directive_deliveries r ON r.id=d.id WHERE d.guild=? AND (r.status IS NULL OR r.status!=d.status) ORDER BY d.at LIMIT 4").bind(mapping.guildId).all<{id:string;issuer:string;target:string;task:string;cost:number;status:string}>()).results;
+ const rows=(await env.DB.prepare("SELECT d.id,d.issuer,d.target,d.task,d.cost,d.status,d.status||CASE WHEN t.directive_id IS NULL THEN '' ELSE ':'||t.new_target END AS delivery_status FROM kp_directives d LEFT JOIN kp_directive_deliveries r ON r.id=d.id LEFT JOIN kp_directive_transfers t ON t.directive_id=d.id WHERE d.guild=? AND (r.status IS NULL OR r.status!=d.status||CASE WHEN t.directive_id IS NULL THEN '' ELSE ':'||t.new_target END) ORDER BY d.at LIMIT 4").bind(mapping.guildId).all<{id:string;issuer:string;target:string;task:string;cost:number;status:string;delivery_status:string}>()).results;
  if(!rows.length)return;
  // KESO PLAY posts go to the earnings channel once its webhook is set; until then, to the results channel.
  const url=new URL(env.KP_EARNINGS_WEBHOOK_URL||env.DISCORD_WEBHOOK_URL);if(url.protocol!=='https:'||url.hostname!=='discord.com'||!url.pathname.startsWith('/api/webhooks/'))throw Error('Invalid webhook');
@@ -363,26 +386,25 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
   const content=d.status==='completed'?`✅ ${name(d.target)}、${task}の指令達成！おつかれ！`:`⚑ <@${d.target}>、次は${task}やで！\n${name(d.issuer)}が${d.cost.toLocaleString('ja-JP')} KPで指名。${d.task==='solo_death_unrated'?'指名後に /death start でアンレを予約してから、ソロで挑戦や。':`次の${task}完了で達成や。`}`;
   const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,allowed_mentions:{parse:[],users:d.status==='active'?[d.target]:[]}}),signal:AbortSignal.timeout(10000)});
   if(!res.ok){console.warn('kp_directive_delivery_pending');break;}
-  await env.DB.prepare('INSERT INTO kp_directive_deliveries VALUES(?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status').bind(d.id,d.status).run();
+  await env.DB.prepare('INSERT INTO kp_directive_deliveries VALUES(?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status').bind(d.id,d.delivery_status).run();
  }
 }
 
 /** Per monitor run: lazily load only the exact matches Henrik returned.
  * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
  * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
+export interface KpRun { directiveRefundDue?:boolean; mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  await ensureEscalationRating(env);
- const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null}>();
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
+ const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at,EXISTS(SELECT 1 FROM kp_directives d WHERE d.guild=? AND d.status='active' AND d.cost>0 AND d.at<=? AND (NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='directive-refund-1:'||d.id) OR (d.at<=? AND NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='directive-refund-2:'||d.id)))) AS refund_due FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId,Date.now()-86400000,Date.now()-172800000,mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null;refund_due:number}>();
+ return {mapping,directiveRefundDue:Boolean(start?.refund_due),startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
 }
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
  * The loaded set is only per cron run, so other workers never share stale data. */
 export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
  COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
- CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
- LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}'
+ CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN EXISTS(SELECT 1 FROM kp_escalation_power_matches x WHERE x.id=e.id) ELSE 1 END AS power_done FROM kp_events e
  LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
  LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
  LEFT JOIN kp_ledger r ON r.id='relic:'||e.id

@@ -1,5 +1,6 @@
 /** KESO relics: a server-owned collection. No bonuses alter other games' KP economy. */
 import {dragoonSetComplete,DRAGOON_SET_NAME} from './relic-dragoon.ts';
+import {normalConsumableDrops} from './relic-consumables.ts';
 import {abyssEquipped} from './relic-abyss.ts';
 import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {steamExtraRelics,STEAM_EXTRA_PER_GRADE,STEAM_GRADE_NAMES,type SteamGrade,type SteamFeatureKind} from './steam-relic-catalog.ts';
@@ -30,6 +31,8 @@ export interface RelicItem {
 }
 export interface RelicCollection {
   totalSummons: number;
+  /** Consumed on use; separate from equipable relics. */
+  consumables?:Record<string,number>;
   shards?: number;
   horseVouchers?: number;
   items: Record<string, RelicItem>;
@@ -66,6 +69,7 @@ export const RELIC_PRESETS:ReadonlyArray<{id:string;name:string}>=[
 export type SummonHistoryEntry={
  at:number;start:number;end:number;count:number;cost:number;summary:Record<string,number>;
  highlights:Array<{id:string;name:string;rarity:string}>;mutations:string[];foils:string[];
+ consumables?:Array<{id:string;name:string;count:number}>;
 };
 export type RelicEffectRecord={
  id:string;mode:string;amount:number;bonus:number;at:number;origin:'native'|'verified';
@@ -755,6 +759,7 @@ export function summonRelics(
   count: number,
   numbers?: Uint32Array,
   variantNumbers?: Uint32Array,
+  consumableNumbers?: Uint32Array,
 ) {
   if (!RELIC_SUMMON_SIZES.includes(count as (typeof RELIC_SUMMON_SIZES)[number])) throw Error('召喚は1・10・100・1000連から選んでください。');
   const price = count * RELIC_SUMMON_COST;
@@ -794,10 +799,14 @@ export function summonRelics(
     summary[rarity] = (summary[rarity] ?? 0) + 1;
     if (['legendary','mythic','ancient','transcendent'].includes(rarity)) highlights.push({id,name,rarity});
   }
+  // The bonus roll never changes the normal draw's rarity, count or cost.
+  const bonusEntropy=consumableNumbers??(numbers?new Uint32Array(count).fill(0xffffffff):crypto.getRandomValues(new Uint32Array(count)));
+  if(bonusEntropy.length!==count)throw Error('Invalid consumable draw');
+  const consumables=normalConsumableDrops(c,bonusEntropy);
   state.cash -= price;
   const rank:Record<string,number>={transcendent:4,ancient:3,mythic:2,legendary:1};
   highlights.sort((a,b)=>(rank[b.rarity]??0)-(rank[a.rarity]??0));
-  const entry:SummonHistoryEntry={at:Date.now(),start:startCount+1,end:c.totalSummons,count,cost:price,summary,highlights:highlights.slice(0,12),mutations:mutations.slice(0,15),foils:foils.slice(0,15)};
+  const entry:SummonHistoryEntry={at:Date.now(),start:startCount+1,end:c.totalSummons,count,cost:price,summary,highlights:highlights.slice(0,12),mutations:mutations.slice(0,15),foils:foils.slice(0,15),...(consumables.length?{consumables}:{})};
   c.summonHistory=[entry,...(c.summonHistory??[])].slice(0,30);
   return {...entry,level:summonLevel(c.totalSummons)};
 }

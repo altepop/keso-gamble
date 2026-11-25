@@ -4,6 +4,7 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, ownedPrizeFor, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
+import {FUJIMURA_LATE_KIND,fujimuraLatePrize,isFujimuraLateNamesake} from './fujimura-lateness.ts';
 import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
@@ -117,7 +118,9 @@ export async function raceEntries(env:KpEnv,mapping:KpMapping,race:number):Promi
  // Conditions were fixed when the race opened; races decided before that rule keep the card's own.
  const fixed=new Map((await env.DB.prepare('SELECT horse,condition FROM kp_entry_conditions WHERE guild=? AND race=?').bind(mapping.guildId,race).all<{horse:string;condition:number}>()).results.map(r=>[r.horse,r.condition]));
  const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)?.nickname??null,record:{races:h.races,wins:h.wins,seconds:h.seconds,thirds:h.thirds},recentRanks:nick.get(h.id)?.recentRanks??[]}));
- const all=crown?[personEntry(mapping,race,crown.user),...owned]:owned;
+ // The old VDK memorial used a display-only placeholder, not a Discord wallet.
+ // Never create a phantom owner or pay a non-existent member for such a crown.
+ const all=crown&&crown.user!=='VDK'?[{...personEntry(mapping,race,crown.user),...(crown.kind===FUJIMURA_LATE_KIND?{name:'藤村号',ownerName:'藤村'}:{})},...owned]:owned;
  return all.map(e=>fixed.has(e.horseId)?{...e,condition:fixed.get(e.horseId)}:e);
 }
 /** Decides once which owned horses run in a race. Called when betting opens, before any bet. */
@@ -151,7 +154,7 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  // Each runner's condition comes from its owner's (or namesake's) play, fixed now with the entries.
  const owners=new Map((picked.length?(await env.DB.prepare(`SELECT id,owner FROM kp_horses WHERE id IN (${picked.map(()=>'?').join(',')})`).bind(...picked.map(p=>p.id)).all<{id:string;owner:string}>()).results:[]).map(r=>[r.id,r.owner]));
  const crown=await crownFor(env,mapping.guildId,race);
- const runners=[...picked.map(p=>({horse:p.id,user:owners.get(p.id)!})),...(crown?[{horse:'person-'+crown.user,user:crown.user}]:[])];
+ const runners=[...picked.map(p=>({horse:p.id,user:owners.get(p.id)!})),...(crown&&crown.user!=='VDK'?[{horse:'person-'+crown.user,user:crown.user}]:[])];
  const conditions=await activityConditions(env,mapping.guildId,runners.map(r=>r.user),now);
  // Entries, conditions and the marker go in one transaction; a concurrent decision inserts nothing.
  await env.DB.batch([
@@ -192,15 +195,19 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
    seed=await raceSeed(env,mapping.guildId,race);
   }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
+  const eventCrown=await crownFor(env,mapping.guildId,race);
   const sold=new Map((await env.DB.prepare('SELECT id,sold_at FROM kp_horses WHERE guild=? AND sold_at IS NOT NULL').bind(mapping.guildId).all<{id:string;sold_at:number}>()).results.map(r=>[r.id,r.sold_at]));
   const odds=raceOdds(card),favourite=card.horses.map((h:{number:number})=>h.number).sort((a:number,b:number)=>odds.winProb[b]-odds.winProb[a])[0];
   for(const h of card.horses.filter((h:{horseId?:string})=>h.horseId)){
    const rank=order.indexOf(h.number),soldAt=sold.get(h.horseId);
    let prize=soldAt!==undefined&&soldAt<race?0:h.person?prizeFor(card,rank):ownedPrizeFor(card,rank);
    if(h.person){
+    if(!isFujimuraLateNamesake(eventCrown,h)){
     const others=await env.DB.prepare("SELECT COALESCE(SUM(json_extract(b.value,'$.amount')),0) AS n FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND s.user!=? AND json_extract(b.value,'$.raceId')=? AND json_extract(b.value,'$.horse')=?").bind(mapping.guildId,h.owner,race,h.number).first<{n:number}>();
     prize+=Math.floor((others?.n??0)*CONSOLATION_RATE);
+    }
    }else await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_runs(id,guild,race,horse,rank,win_odds,favourite) VALUES(?,?,?,?,?,?,?)').bind(`${race}:${h.horseId}`,mapping.guildId,race,h.horseId,rank+1,odds.win[h.number],h.number===favourite?1:0).run();
+   prize=fujimuraLatePrize(eventCrown,h,prize);
    const r=await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_results(id,guild,race,horse,owner,rank,prize,at) VALUES(?,?,?,?,?,?,?,?)').bind(`${race}:${h.horseId}`,mapping.guildId,race,h.horseId,h.owner,rank+1,prize,now).run();
    if(r.meta.changes)paid+=prize;
   }

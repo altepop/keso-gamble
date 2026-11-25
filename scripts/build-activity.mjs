@@ -14,6 +14,7 @@ const digest=createHash('sha256');
 for(const [p,s] of sources)digest.update(p+'\0'+unversioned(s)+'\0');
 for(const name of readdirSync(resolve(root,'assets/escalation-ranks')).filter(n=>/\.(svg|png)$/.test(n)).sort())digest.update(name+'\0').update(readFileSync(resolve(root,'assets/escalation-ranks',name)));
 const version='web-'+digest.digest('hex').slice(0,16);
+if(process.argv.includes('--check'))console.log('ACTIVITY_EXPECTED_VERSION='+version);
 let stale=false;
 for(const [p,s] of sources){
  const next=s.replace(imports,(_m,before,path,after)=>before+path+'?v='+version+after);
@@ -29,11 +30,17 @@ const musicVersions=new Map(musicFiles.map(path=>{
   .update(bytes).digest('hex');
  return [path,'music-'+blob.slice(0,12)];
 }));
+// Independent enhancement script is outside js/ hashing. Its previous fixed
+// query could keep the stale standalone PvE redirect in Discord's iOS cache.
+const duelQualityBytes=readFileSync(resolve(root,'duel-quality/duel-quality.js'));
+const duelQualityVersion='duel-'+createHash('sha256').update(duelQualityBytes).digest('hex').slice(0,16);
 const index=resolve(root,'index.html'),html=readFileSync(index,'utf8');
 const next=html.replace(/(<meta name="keso-release" content=")[^"]*("\s*\/>)/,'$1'+version+'$2')
  .replace(/((?:src|href)="\.\/(?:js\/bootstrap\.js|css\/styles\.css))(?:\?[^"]*)?(\")/g,'$1?v='+version+'$2');
 const musicNext=next.replace(/((?:src|href)="\.\/(music\/(?:player\.css|lyrics\.js|player\.js)))(?:\?[^"]*)?(")/g,
  (_match,begin,path,end)=>begin+'?v='+musicVersions.get(path)+end);
-if(musicNext!==html){if(process.argv.includes('--check')){console.error('Stale browser entry versions: '+relative(root,index));stale=true;}else writeFileSync(index,musicNext);}
+const stableNext=musicNext.replace(/(src="\.\/duel-quality\/duel-quality\.js)(?:\?[^"]*)?(")/g,
+ (_match,begin,end)=>begin+'?v='+duelQualityVersion+end);
+if(stableNext!==html){if(process.argv.includes('--check')){console.error('Stale browser entry versions: '+relative(root,index));stale=true;}else writeFileSync(index,stableNext);}
 if(stale)throw Error('Browser files changed; run npm run build:activity');
 console.log('Activity release '+version+(process.argv.includes('--check')?' verified.':' prepared.'));

@@ -1,7 +1,7 @@
-import { createProgress, hydrateProgress } from './progression.js?v=web-332712cc932d20c7';
-import { createRacing, hydrateRacing } from './racing.js?v=web-332712cc932d20c7';
-import { createCasino, hydrateCasino } from './casino.js?v=web-332712cc932d20c7';
-import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-332712cc932d20c7';
+import { createProgress, hydrateProgress } from './progression.js?v=web-ca5d2ee9a5a25ff4';
+import { createRacing, hydrateRacing } from './racing.js?v=web-ca5d2ee9a5a25ff4';
+import { createCasino, hydrateCasino } from './casino.js?v=web-ca5d2ee9a5a25ff4';
+import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-ca5d2ee9a5a25ff4';
 /** KESO EXCHANGE - local prototype engine (NOT authoritative for real multiplayer). */
 const SCHEMA_VERSION = 1;
 const MARKET = [
@@ -15,7 +15,8 @@ const MARKET = [
   // 架空の会社（メンバーの名前から）。ときどき架空のニュースで大きく動く。
   { id: 'komi', ticker: 'KOMI', name: '小路グローバルモーターズ', category: '新興国', initialPrice: 1200, volatility: 0.07, drift: 0.002, icon: '✈' },
   { id: 'ishi', ticker: 'ISHI', name: '石原エレクトリック', category: '電機', initialPrice: 980, volatility: 0.04, drift: 0.001, icon: '⌘' },
-  { id: 'vdk', ticker: 'VDK', name: 'VDKブラック商事', category: 'グレー', initialPrice: 100, volatility: 0.12, drift: 0, icon: '☠' },
+  { id: 'vdk', ticker: 'VDK', name: 'VDKブラック商事', category: '倒産予定', initialPrice: 100, volatility: 0.12, drift: 0, icon: '☠' },
+  { id: 'vdkc', ticker: 'VDKC', name: 'VDKブラックコンサル', category: 'コンサル', initialPrice: 500, volatility: 0.045, drift: 0.001, icon: '📊' },
   { id: 'godo', ticker: 'GODO', name: '神戸（ごうど）ふるさと公社', category: 'ふるさと納税', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '印' },
   { id: 'ngya', ticker: 'NGYA', name: '名古屋ヘンテコ発明所', category: '謎の発明', initialPrice: 777, volatility: 0.08, drift: 0.001, icon: '？' },
   { id: 'koba', ticker: 'KOBA', name: '小林百貨店', category: '百貨店', initialPrice: 820, volatility: 0.03, drift: 0.001, icon: '百' },

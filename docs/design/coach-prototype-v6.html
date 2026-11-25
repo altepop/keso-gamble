@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<title>KESO COACH トップ画面プロトタイプ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Archivo:wght@700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1923;
+    --bg-2:#16212d;
+    --panel:#1c2a38;
+    --panel-2:#243443;
+    --line:#33465a;
+    --line-soft:#263646;
+    --ink:#edf1f5;
+    --ink-2:#d7dfe8;
+    --ink-3:#a5b5c5;
+    --red:#ff4655;
+    --red-dark:#d13642;
+    --teal:#00c4b3;
+    --paper:#ece8e1;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",system-ui,sans-serif;font-size:16px;line-height:1.9;letter-spacing:.02em;text-align:left;line-break:strict;overflow-wrap:break-word}
+  /* technical grid — thin lines like a tactical overlay */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff07 1px,transparent 1px),linear-gradient(90deg,#ffffff07 1px,transparent 1px);background-size:48px 48px}
+  .num{font-family:"Archivo","Noto Sans JP",sans-serif;font-variant-numeric:tabular-nums}
+  .disp{font-family:"Oswald","Archivo",sans-serif;text-transform:uppercase;letter-spacing:.06em}
+  .nw{white-space:nowrap}
+  .wrap{max-width:600px;margin:0 auto;padding:0 16px 48px;position:relative}
+  .cut{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+  .cut-sm{clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .micro{font-family:"Oswald",sans-serif;font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
+  .micro b{color:var(--red);font-weight:700}
+  .micro::before{content:"// ";color:var(--red)}
+
+  /* ============ TOP HERO with Chamber ============ */
+  .tophero{position:relative;margin:0 -16px;overflow:hidden;background:#0a121a;border-bottom:2px solid var(--red)}
+  .tophero .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.34}
+  .tophero .shade{position:absolute;inset:0;background:linear-gradient(90deg,#0f1923f2 0%,#0f1923cc 52%,#0f192340 100%),linear-gradient(to top,#0f1923 4%,transparent 55%)}
+  .tophero .diag{position:absolute;top:0;right:34%;width:2px;height:140%;background:var(--red);transform:rotate(18deg);transform-origin:top;opacity:.7}
+  .tophero-inner{position:relative;padding:20px 16px 18px;min-height:218px}
+  .tophero .chamber{position:absolute;right:4px;bottom:0;height:212px;width:auto;object-fit:contain;pointer-events:none;filter:drop-shadow(-10px 8px 18px #00000090)}
+  .playerline{position:relative;z-index:2;max-width:72%}
+  .playerline .name{font-size:26px;font-weight:900;line-height:1.25;letter-spacing:.01em;margin:8px 0 4px}
+  .playerline .ids{font-size:12px;color:var(--ink-2);line-height:1.65}
+  .rankrow{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:2}
+  .rankbox{background:#ece8e1;color:#0f1923;padding:7px 12px 6px;line-height:1.2}
+  .rankbox .r{font-family:"Oswald",sans-serif;font-weight:700;font-size:16px;letter-spacing:.05em}
+  .rankbox .k{font-size:9.5px;font-weight:700;letter-spacing:.12em;color:#4a5a68}
+  .rankbox.ghost{background:#0f1923b8;color:var(--ink);border:1px solid var(--line)}
+  .rankbox.ghost .k{color:var(--ink-3)}
+  .coach-intro{position:relative;z-index:2;margin:16px 0 0;font-size:15px;color:#e8edf2;max-width:94%;line-height:1.9}
+  .coach-intro + .coach-intro{margin-top:6px}
+
+  /* ============ PDCA ============ */
+  .pdca{margin-top:20px;background:var(--bg-2);border:1px solid var(--line-soft);border-left:3px solid var(--red);padding:16px 14px 14px}
+  .pdca-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+  .pdca-head .disp{font-size:19px;font-weight:700;color:var(--ink)}
+  .pdca p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.85}
+  .pdca p + p{margin-top:4px}
+  .steps{list-style:none;margin:14px 0 0;padding:0;display:flex;position:relative}
+  .steps::before{content:"";position:absolute;left:10%;right:10%;top:14px;height:2px;background:var(--line)}
+  .steps li{flex:1;text-align:center;position:relative;padding:0 1px;min-width:0}
+  .sq{width:29px;height:29px;margin:0 auto 7px;background:var(--panel-2);border:2px solid var(--line);display:grid;place-items:center;position:relative;z-index:1;font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;color:var(--ink-3);clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px))}
+  .steps li.done .sq{border-color:var(--teal);background:var(--teal);color:#06231f}
+  .steps li.done .sq svg{width:14px;height:14px}
+  .steps li.now .sq{border-color:var(--red);background:var(--red);color:#fff}
+  .steps .lb{font-size:10.5px;font-weight:700;line-height:1.4;color:var(--ink-2);display:block}
+  .steps li.done .lb{color:var(--ink-3)}
+  .steps li.now .lb{color:var(--ink);font-weight:900}
+  .steps .tag{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:900;color:var(--red);letter-spacing:.08em}
+
+  /* ============ section heads ============ */
+  .sec-head{margin:36px 0 14px;display:flex;align-items:flex-end;gap:12px}
+  .sec-head .disp{font-size:27px;font-weight:700;line-height:1;color:var(--ink)}
+  .sec-head .disp em{font-style:normal;color:var(--red)}
+  .sec-head .rule{flex:1;height:2px;background:var(--line-soft);margin-bottom:5px;position:relative}
+  .sec-head .rule::after{content:"";position:absolute;right:0;top:-3px;width:26px;height:8px;background:var(--red);clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%)}
+
+  /* ============ image bands ============ */
+  .imgband{position:relative;overflow:hidden;margin:0 -16px;height:172px}
+  .imgband img{width:100%;height:100%;object-fit:cover;display:block}
+  .imgband .shade{position:absolute;inset:0;background:linear-gradient(to top,#0f1923 2%,#0f1923d9 34%,#0f192300 68%),linear-gradient(90deg,#0f1923c9,transparent 62%)}
+  .imgband .cap{position:absolute;left:16px;bottom:12px;z-index:2}
+  .imgband .cap .disp{font-size:21px;font-weight:700;color:#fff;line-height:1.1;text-shadow:0 2px 10px #000}
+  .imgband .agentcut{position:absolute;right:-8px;bottom:0;height:168px;width:auto;z-index:1;filter:drop-shadow(-8px 6px 14px #000000a0)}
+
+  /* ============ coach talk cards ============ */
+  .talk{background:var(--bg-2);border:1px solid var(--line-soft);padding:20px}
+  .talk p{margin:0;font-size:15.5px;color:var(--ink);line-height:1.95}
+  .talk p + p{margin-top:12px}
+  .evidence{display:flex;gap:10px;margin-top:16px}
+  .ev{flex:1;background:var(--panel);border-top:3px solid var(--red);padding:12px}
+  .ev .v{font-family:"Oswald",sans-serif;font-weight:700;font-size:30px;line-height:1.05;color:var(--ink)}
+  .ev .v small{font-size:13px;color:var(--ink-2);font-family:"Noto Sans JP",sans-serif;font-weight:700}
+  .ev p{margin:6px 0 0 !important;font-size:12.5px !important;line-height:1.7 !important;color:#dbe3ec !important}
+
+  /* ============ drill (P082) ============ */
+  .drill{border:2px solid var(--red);background:var(--bg-2);margin-top:12px}
+  .drill-head{padding:18px 18px 0}
+  .drill-head .pidrow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .pid{font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;letter-spacing:.18em;color:var(--red)}
+  .total-badge{flex:none;background:var(--red);color:#fff;text-align:center;padding:8px 12px 7px;line-height:1.15;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .total-badge .n{font-family:"Oswald",sans-serif;font-weight:700;font-size:21px;display:block}
+  .total-badge .u{font-size:9.5px;font-weight:700;letter-spacing:.1em}
+  .drill-head h2{margin:8px 0 10px;font-size:19px;font-weight:900;line-height:1.55}
+  .drill-head p{margin:0;font-size:15px;color:var(--ink);line-height:1.9}
+  .drill-head p + p{margin-top:10px}
+  .splitbar{display:flex;gap:6px;margin:16px 18px 0}
+  .splitbar div{height:8px;background:var(--panel-2)}
+  .splitbar div.on{background:var(--red)}
+  .splitlabels{display:flex;gap:6px;margin:6px 18px 0;font-size:10.5px;color:var(--ink-3);font-weight:700}
+  .splitlabels span{display:block}
+  .timerbox{margin:14px 18px 0;background:#0a121a;border:1px solid var(--line-soft);padding:12px;display:flex;align-items:center;gap:12px}
+  .timerbox .clock{font-family:"Oswald",sans-serif;font-weight:700;font-size:32px;line-height:1;color:var(--ink);min-width:92px}
+  .timerbox .tbtns{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+  .tbtn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;font-weight:700;font-size:12px;padding:8px 10px;cursor:pointer;min-height:38px}
+  .tbtn.main{background:var(--red);border-color:var(--red);color:#fff}
+  .timerbox .hint{font-size:12px;color:var(--ink-2);line-height:1.7}
+
+  .block{padding:24px 18px;border-top:1px solid var(--line-soft);margin-top:20px;position:relative}
+  .block::before{content:"";position:absolute;left:0;top:24px;width:3px;height:34px;background:var(--red)}
+  .block .bhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .block .bno{font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--red)}
+  .block .btime{font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;color:var(--ink-3)}
+  .block h3{margin:6px 0 14px;font-size:17px;font-weight:900;line-height:1.6}
+  .setting{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 18px}
+  .setting div{background:#0a121a;border:1px solid var(--line-soft);padding:10px 12px}
+  .setting .k{font-size:10.5px;font-weight:900;letter-spacing:.14em;color:var(--red);display:block;margin-bottom:3px}
+  .setting .v{font-size:13.5px;font-weight:700;line-height:1.55;color:var(--ink)}
+  .block > p{margin:0 0 16px;font-size:15px;color:var(--ink);line-height:1.9}
+  /* numbered drill steps — one action per line */
+  .dsteps{list-style:none;counter-reset:st;margin:0;padding:0;display:grid;gap:16px}
+  .dsteps li{counter-increment:st;position:relative;padding-left:42px;font-size:15.5px;line-height:1.85;color:var(--ink)}
+  .dsteps li::before{content:counter(st);position:absolute;left:0;top:2px;width:27px;height:27px;background:var(--red);color:#fff;font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;line-height:1;display:grid;place-items:center;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,6px 100%,0 calc(100% - 6px))}
+  .rep{display:flex;gap:10px;align-items:center;margin-top:18px;background:#ff465514;border:1px dashed #ff465570;padding:12px 14px}
+  .rep .rv{font-family:"Oswald",sans-serif;font-weight:700;font-size:22px;color:var(--red);flex:none;line-height:1}
+  .rep p{margin:0;font-size:13.5px;line-height:1.75;color:#e6ebf0}
+
+  .nextcheck{margin:4px 18px 18px;background:var(--panel);border:1px solid var(--line-soft);padding:16px}
+  .nextcheck .disp{font-size:16px;font-weight:700;margin-bottom:8px}
+  .nextcheck > p{margin:0;font-size:14.5px;color:var(--ink);line-height:1.85}
+  .nextcheck > p + p{margin-top:6px}
+  .checks{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:14px}
+  .checks li{display:flex;gap:10px;font-size:14.5px;color:#e2e8ef;line-height:1.8}
+  .checks .box{flex:none;width:20px;height:20px;margin-top:4px;border:2px solid var(--red);display:grid;place-items:center;color:transparent;clip-path:polygon(0 0,calc(100% - 5px) 0,100% 5px,100% 100%,5px 100%,0 calc(100% - 5px))}
+  .drill-cta{display:flex;gap:8px;padding:0 18px 18px}
+  .btn{appearance:none;border:0;cursor:pointer;font-family:inherit;font-weight:900;font-size:14px;min-height:50px;padding:0 18px;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+  .btn-main{background:var(--red);color:#fff;flex:1}
+  .btn-main[aria-pressed="true"]{background:var(--teal);color:#04211d}
+  .btn-sub{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);flex:none}
+  .accept-note{margin:0 18px 18px;font-size:14px;color:var(--ink-2);line-height:1.85}
+
+  /* ============ sub tasks ============ */
+  .subs{display:grid;gap:8px;margin-top:12px}
+  .sub-task{display:flex;gap:12px;width:100%;text-align:left;cursor:pointer;background:var(--bg-2);border:1px solid var(--line-soft);border-left:3px solid var(--line);padding:14px;color:var(--ink);font-family:inherit}
+  .sub-task .left{flex:none;text-align:center}
+  .sub-task .check{width:24px;height:24px;margin:6px auto 0;border:2px solid var(--line);display:grid;place-items:center;color:transparent;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,6px 100%,0 calc(100% - 6px))}
+  .sub-task[aria-pressed="true"]{border-left-color:var(--teal)}
+  .sub-task[aria-pressed="true"] .check{background:var(--teal);border-color:var(--teal);color:#04211d}
+  .sub-task .tt{flex:1;min-width:0}
+  .sub-task .tt .a{font-weight:900;font-size:15px;line-height:1.55}
+  .sub-task .tt p{margin:4px 0 0;font-size:13.5px;color:#d5dde6;line-height:1.8}
+  .total-line{margin:14px 2px 0;font-size:13.5px;color:var(--ink-2);line-height:1.85;text-align:left}
+  .total-line b{color:var(--ink)}
+
+  /* ============ map cards ============ */
+  .mapcard{position:relative;overflow:hidden;border:1px solid var(--line-soft);margin-top:10px;background:var(--bg-2)}
+  .mapcard .mimg{height:148px;position:relative;overflow:hidden}
+  .mapcard .mimg > img.bg{width:100%;height:100%;object-fit:cover;display:block}
+  .mapcard .mimg .shade{position:absolute;inset:0;background:linear-gradient(to top,#16212d 2%,transparent 58%),linear-gradient(90deg,#0f1923a8,transparent 62%)}
+  .mapcard .mimg .agent{position:absolute;right:2px;bottom:0;height:142px;width:auto;z-index:1}
+  .mapcard .mimg .mname{position:absolute;left:14px;bottom:10px;z-index:2}
+  .mapcard .mimg .mname .disp{font-size:25px;font-weight:700;color:#fff;line-height:1;text-shadow:0 2px 10px #000}
+  .mapcard .mbody{padding:16px 18px 18px}
+  .mapcard .mbody p{margin:0;font-size:15px;color:var(--ink);line-height:1.9}
+  .mapcard .mbody p + p{margin-top:10px}
+  .mapstat{display:inline-block;margin-top:12px;font-size:11px;font-weight:700;color:var(--ink-3);border:1px solid var(--line-soft);padding:5px 9px;background:#0a121a}
+  .mapstat b{color:var(--ink);font-family:"Archivo",sans-serif}
+
+  /* ============ remember strip ============ */
+  .remember{margin-top:26px;background:var(--red);color:#fff;padding:18px;position:relative;overflow:hidden}
+  .remember::after{content:"";position:absolute;right:-30px;top:-10px;width:90px;height:160%;background:#ffffff14;transform:rotate(18deg)}
+  .remember .micro{color:#ffd9dd}
+  .remember .micro::before{color:#fff}
+  .remember p{margin:8px 0 0;font-size:16px;font-weight:700;line-height:1.85;position:relative;z-index:1}
+  .remember p + p{font-size:13.5px;font-weight:500}
+
+  /* ============ details ============ */
+  details{margin-top:26px;background:var(--bg-2);border:1px solid var(--line-soft)}
+  summary{cursor:pointer;list-style:none;padding:16px 18px;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:900;font-size:14px;line-height:1.6}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--red);font-family:"Oswald",sans-serif;font-weight:700;transition:transform .2s;flex:none}
+  details[open ] summary .chev{transform:rotate(180deg)}
+  .detail-body{padding:0 18px 18px}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .stat{background:#0a121a;border:1px solid var(--line-soft);border-top:2px solid var(--line);padding:11px 12px}
+  .stat .v{font-family:"Oswald",sans-serif;font-weight:700;font-size:23px;line-height:1.1}
+  .stat .k{font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.55}
+  .sova{display:flex;gap:14px;margin-top:16px;background:var(--panel);border:1px solid var(--line-soft);overflow:hidden}
+  .sova img{width:108px;height:168px;object-fit:contain;object-position:bottom center;flex:none;background:#101c28;padding-top:8px}
+  .sova div{padding:12px 12px 12px 0}
+  .sova p{margin:0;font-size:13px;color:var(--ink-2);line-height:1.85}
+  .sova p b{color:var(--ink)}
+  .notes{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:12px}
+  .notes li{font-size:13.5px;color:var(--ink-2);line-height:1.85;padding-left:16px;position:relative}
+  .notes li::before{content:"";position:absolute;left:0;top:10px;width:7px;height:7px;background:var(--red);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .notes li b{color:var(--ink)}
+  .caveats{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft);font-size:11px;color:var(--ink-3);line-height:1.8}
+  footer{margin-top:22px;font-size:11px;color:var(--ink-3);line-height:1.8}
+  footer a{color:var(--ink-2)}
+
+  @media (min-width:560px){
+    .tophero-inner{min-height:238px}
+    .tophero .chamber{height:232px}
+    .sec-head .disp{font-size:32px}
+    .imgband{height:196px}
+    .imgband .agentcut{height:190px}
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .steps li.now .sq{animation:pulse 2.4s ease-in-out infinite}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 3px #ff46552b}50%{box-shadow:0 0 0 6px #ff46551c}}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== TOP HERO : Chamber, his best agent ===== -->
+  <header class="tophero">
+    <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
+    <div class="shade"></div><div class="diag" aria-hidden="true"></div>
+    <img class="chamber" src="assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
+    <div class="tophero-inner">
+      <div class="playerline">
+        <span class="micro">Act VI <b>//</b> Coach Brief</span>
+        <div class="name">神戸（Kobe）</div>
+        <div class="ids">Aquatopia#toppy（メイン）／ Abema#ttv<br>2つのアカウントを合わせて確認しています</div>
+      </div>
+      <div class="rankrow">
+        <div class="rankbox cut-sm"><span class="k">CURRENT RANK</span><div class="r">DIAMOND 3</div></div>
+        <div class="rankbox ghost cut-sm"><span class="k">PEAK</span><div class="r">ASCENDANT 1</div></div>
+      </div>
+      <p class="coach-intro">昨日の試合は、両アカウントともすべて確認しました。</p>
+      <p class="coach-intro">本日は練習を1つだけご用意しました。</p>
+      <p class="coach-intro">すでにできていることを、次の試合でも再現するための練習です。</p>
+      <p class="coach-intro">10分ほどお時間をいただけますと幸いです。</p>
+    </div>
+  </header>
+
+  <!-- ===== PDCA ===== -->
+  <section class="pdca cut" aria-label="試合から今日の練習までの進み具合">
+    <div class="pdca-head">
+      <span class="disp">Cycle</span>
+      <span class="micro">V26 Act 6 <b>//</b> Competitive</span>
+    </div>
+    <p>試合データはすでに届いており、分析も完了しています。</p>
+    <p>あとは本日の練習を実施し、次の試合で試していただく段階まで来ています。</p>
+    <ol class="steps">
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">試合</span></li>
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">速報</span></li>
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">分析</span></li>
+      <li class="now" aria-current="step"><span class="sq num">4</span><span class="lb">今日の練習</span><br><span class="tag">いまここ</span></li>
+      <li><span class="sq num">5</span><span class="lb">次の試合</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== OPENING : what the coach saw ===== -->
+  <div class="sec-head"><span class="disp">Opening <em>Fights</em></span><span class="rule"></span><span class="micro">What I saw</span></div>
+  <section class="talk cut" aria-label="開幕の接敵についてコーチが見たこと">
+    <p>最も印象に残ったのは、ラウンド開始直後に最初に敵と接敵する回数が多い点です。</p>
+    <p>1試合あたり平均で約2回、ご自身から最初の流れを作りに行っています。</p>
+    <p>うまくいったキルでは、当たる前から<span class="nw">クロスヘア</span>が頭の高さに置けていて、角の手前で一度止まれていました。</p>
+    <p>惜しかった場面は、走ったまま覗いて初弾がずれてしまったところです。本日はその準備の部分だけを、練習で先に潰しておきます。</p>
+    <div class="evidence">
+      <div class="ev"><div class="v num">≈2 <small>回 / 試合</small></div><p>1試合で最初に敵と当たった回数の平均です。</p></div>
+      <div class="ev"><div class="v num">1.17</div><p>メインアカウントのK/Dです。銃の土台は崩れていません。</p></div>
+    </div>
+  </section>
+
+  <!-- ===== DRILL P082 ===== -->
+  <div class="sec-head"><span class="disp">Today's <em>Drill</em></span><span class="rule"></span><span class="micro">P082 <b>//</b> 10 min</span></div>
+
+  <div class="imgband" aria-hidden="true">
+    <img src="assets/range-splash.png" alt="">
+    <div class="shade"></div>
+    <img class="agentcut" src="assets/jett-cut.png" alt="">
+    <div class="cap"><span class="micro" style="color:#ffd9dd">The Range <b>//</b> Deathmatch <b>//</b> Custom</span><div class="disp">Do it exactly<br>like this</div></div>
+  </div>
+
+  <section class="drill cut" aria-label="今日の練習 P082">
+    <div class="drill-head">
+      <div class="pidrow">
+        <div>
+          <span class="pid">P082</span>
+          <h2>本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です</h2>
+        </div>
+        <div class="total-badge"><span class="n num">10</span><span class="u">MIN TOTAL</span></div>
+      </div>
+      <p>目的は、取れたキルの前にあった準備を体に思い出させることです。新しいことを覚える練習ではありません。</p>
+      <p>疲れている日でも、タイマーを押してブロック1から始めれば、最後までそのまま流れるように作ってあります。</p>
+      <p>難易度はダイヤモンド帯を前提に設定しています。イージーのボットは使用しません。</p>
+    </div>
+
+    <div class="splitbar" aria-hidden="true"><div class="on" style="flex:3"></div><div class="on" style="flex:4;opacity:.72"></div><div class="on" style="flex:3;opacity:.45"></div></div>
+    <div class="splitlabels" aria-hidden="true"><span style="flex:3">BLOCK 1 — 3 MIN</span><span style="flex:4">BLOCK 2 — 4 MIN</span><span style="flex:3">BLOCK 3 — 3 MIN</span></div>
+
+    <div class="timerbox">
+      <div class="clock num" id="clock">03:00</div>
+      <div style="flex:1;min-width:150px">
+        <div class="tbtns">
+          <button class="tbtn" type="button" data-min="3">3分</button>
+          <button class="tbtn" type="button" data-min="4">4分</button>
+          <button class="tbtn" type="button" data-min="3">最後の3分</button>
+          <button class="tbtn main" type="button" id="timerBtn">タイマーを開始する</button>
+          <button class="tbtn" type="button" id="timerReset">リセットする</button>
+        </div>
+        <p class="hint" style="margin:7px 0 0">上のボタンで時間を合わせてから開始してください。音は鳴りません。</p>
+      </div>
+    </div>
+
+    <!-- BLOCK 1 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 1</span><span class="btime num">03:00 — THE RANGE</span></div>
+      <h3>最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">射撃場 ／ 練習モード</span></div>
+        <div><span class="k">ボット</span><span class="v">前半<span class="nw">ミディアム</span> → 後半<span class="nw">ハード</span> ／ <span class="nw">ストレイフON</span></span></div>
+        <div><span class="k">装備</span><span class="v"><span class="nw">アーマーON</span> ／ <span class="nw">ヴァンダル</span></span></div>
+        <div><span class="k">やる回数</span><span class="v"><span class="nw">ハード</span>で撃破50体、<span class="nw">または</span>3分のタイムドセット</span></div>
+      </div>
+      <ol class="dsteps">
+        <li>射撃場に入り、ボットエリアの角を本番のマップの角と見立てて近づきます。</li>
+        <li><span class="nw">ストレイフ</span>で動くボットに対して、頭が出てきそうな高さと位置に<span class="nw">クロスヘア</span>を先に置きます。</li>
+        <li>自分の体が完全に止まるまで待ってから、初弾を頭に合わせます。</li>
+        <li>前半は<span class="nw">ミディアム</span>、後半は<span class="nw">ハード</span>に切り替え、同じ順番を続けます。</li>
+        <li>走りながら撃った場合や、止まる前に撃ち始めた場合は、その1体は数えません。</li>
+      </ol>
+      <div class="rep"><span class="rv num">×50</span><p>50体をこの順番で倒せれば終了です。3分で届かなかった場合は、止まってから初弾を当てられた回数が前回より増えたかを確認してください。</p></div>
+    </div>
+
+    <!-- BLOCK 2 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 2</span><span class="btime num">04:00 — DEATHMATCH</span></div>
+      <h3>次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">デスマッチ ／ フルスピード</span></div>
+        <div><span class="k">武器</span><span class="v"><span class="nw">ヴァンダル</span>（<span class="nw">シェリフ</span>／<span class="nw">ガーディアン</span>も可）</span></div>
+        <div><span class="k">撃ち方</span><span class="v">短いバーストまで ／ 長いスプレーは禁止です</span></div>
+        <div><span class="k">勝ち負け</span><span class="v">キル数は数えなくて構いません</span></div>
+      </div>
+      <p>順位は追わなくて構いません。守っていただく決め事は1つだけです。</p>
+      <ol class="dsteps">
+        <li>角を曲がる前に、<span class="nw">クロスヘア</span>が頭の高さに置けているかを確認します。</li>
+        <li>置けていた時だけ撃ち合いに行き、それ以外では無理に当たりに行きません。</li>
+        <li>置けていないまま飛び出して負けた場合は、準備が間に合わなかっただけです。エイムの問題ではありません。</li>
+        <li>走り撃ちに気づきましたら、リスポーン後に一度止まります。</li>
+        <li>次の角で頭が出る位置を先に思い浮かべてから、歩き出してください。</li>
+      </ol>
+      <div class="rep"><span class="rv num">4 MIN</span><p>4分間この決め事を守れれば終了です。終了後、置けていた接敵が何回あったかを大まかに思い出していただければ十分です。</p></div>
+    </div>
+
+    <!-- BLOCK 3 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 3</span><span class="btime num">03:00 — CUSTOM</span></div>
+      <h3>最後の3分はカスタムで、次の試合の入りを圧をかけた状態で確認します</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">カスタムゲーム</span></div>
+        <div><span class="k">マップ</span><span class="v">これから遊ぶマップを1つ選んでください</span></div>
+        <div><span class="k">条件</span><span class="v">制限時間つき ／ 可能であれば味方1名にクロスを持ってもらいます</span></div>
+        <div><span class="k">やる回数</span><span class="v">開幕で当たる場所3つ × 各3回</span></div>
+      </div>
+      <ol class="dsteps">
+        <li>カスタムでマップを開き、開幕で敵と当たる場所を3つ選びます。</li>
+        <li>スポーンからその場所まで、実際に歩いて行きます。</li>
+        <li>角の手前で止まり、頭が出そうな位置に<span class="nw">クロスヘア</span>を置いてから覗きます。</li>
+        <li>ソロの場合は、スポーンから接敵位置までを制限時間内に収めて圧をかけます。</li>
+        <li>味方と行う場合は、1名に反対側のクロスを持ってもらいます。</li>
+        <li>単独で飛び出さない入り方を確認します。</li>
+        <li>1つの場所につき3回、合計9回で終了です。終了後は、そのままコンペティティブのキューを入れて構いません。</li>
+      </ol>
+      <div class="rep"><span class="rv num">3 × 3</span><p>3つの場所で3回ずつできましたら、練習はすべて終了です。ここまででちょうど10分になります。</p></div>
+    </div>
+
+    <!-- NEXT MATCH CHECKS -->
+    <div class="nextcheck cut-sm">
+      <div class="disp">Next Match <span style="color:var(--red)">//</span> What I'll Check</div>
+      <p>次の試合が終わりましたら、下の3点を確認します。</p>
+      <p>すべてを完璧にする必要はありません。最初の3ラウンドだけでも意識していただければ、変化は拾えます。</p>
+      <ul class="checks">
+        <li><span class="box" aria-hidden="true"></span><span>開幕の接敵で、覗く前に<span class="nw">クロスヘア</span>を置いて止まれていたか。最初の3ラウンドだけ確認します。</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>ファーストブラッドへの関与が、現在の平均程度に保てているかも確認します。</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>スキルを持ったまま倒れていなかったかも確認します。使える場面では、先にスキルを使ってから撃ち合ってください。</span></li>
+      </ul>
+    </div>
+
+    <div class="drill-cta">
+      <button class="btn btn-main" id="acceptBtn" type="button" aria-pressed="false">この内容で実施します</button>
+      <button class="btn btn-sub" id="swapBtn" type="button">他の練習を見る</button>
+    </div>
+    <p class="accept-note" id="acceptNote" hidden>承知しました。次の試合では最初の3ラウンドを確認し、止まれていたキルがどれくらい増えたかを数えて並べておきます。</p>
+  </section>
+
+  <!-- sub tasks -->
+  <div class="subs" role="group" aria-label="補助の練習">
+    <button class="sub-task cut-sm" type="button" aria-pressed="false" data-task="P097">
+      <span class="left"><span class="pid num">P097</span><span class="check" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span></span>
+      <span class="tt"><span class="a">明日の最初に、本日の射撃場ブロックをもう一度実施してください</span><p>一晩経つと、止まり方は少し抜けてしまうことがあります。明日、最初の3分だけブロック1を繰り返すと体に残りやすくなります。</p></span>
+    </button>
+    <button class="sub-task cut-sm" type="button" aria-pressed="false" data-task="P010">
+      <span class="left"><span class="pid num">P010</span><span class="check" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span></span>
+      <span class="tt"><span class="a">射撃場で止まれるようになりましたら、デスマッチでも同じことができるか試してください</span><p>ブロック2で実施していることが、まさにこれにあたります。本日の分は、すでに上の練習の中に含まれています。</p></span>
+    </button>
+  </div>
+  <p class="total-line">本日の分は、すべて合わせても<b>10分</b>で終わります。長く練習することよりも、決めた順番をそのまま一度通すことの方が合っていると考えています。</p>
+
+  <!-- ===== MAP NOTES with official splashes ===== -->
+  <div class="sec-head"><span class="disp">Map <em>Notes</em></span><span class="rule"></span><span class="micro">Abyss <b>//</b> Summit</span></div>
+  <p style="margin:0 2px;font-size:15px;color:var(--ink);line-height:1.9">あわせてマップについてもお伝えします。感じている苦手意識と、実際の数字が少しずれている点がありました。</p>
+
+  <article class="mapcard cut">
+    <div class="mimg">
+      <img class="bg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式スプラッシュアート">
+      <div class="shade"></div>
+      <img class="agent" src="assets/clove-cut.png" alt="エージェント、クローヴの公式アート">
+      <div class="mname"><span class="micro" style="color:#ffd9dd">Map <b>//</b> 01</span><div class="disp">Abyss</div></div>
+    </div>
+    <div class="mbody">
+      <p>アビスについては、苦手だと感じているかもしれません。</p>
+      <p>しかし勝率で見ますと50%あり、最も負けているマップではありません。</p>
+      <p>ただし、ヘッドショット率などの個人の数字は少し沈みがちです。</p>
+      <p>次にアビスが来ましたら<span class="nw">クローヴ</span>で入り、スモークを出す場所を2つだけ決めておいてください。</p>
+      <p>決めるのは試合開始前で構いません。</p>
+      <p>考えることが減る分、撃ち合いに集中しやすくなります。</p>
+      <span class="mapstat">勝率（メイン） <b>50%</b> ／ 感覚ほど負けてはいません</span>
+    </div>
+  </article>
+
+  <article class="mapcard cut">
+    <div class="mimg">
+      <img class="bg" src="assets/summit-splash.png" alt="VALORANTのマップ、サミットの公式スプラッシュアート">
+      <div class="shade"></div>
+      <div class="mname"><span class="micro" style="color:#ffd9dd">Map <b>//</b> 02</span><div class="disp">Summit</div></div>
+    </div>
+    <div class="mbody">
+      <p>サミットは4回実施して、まだ勝利がありません。</p>
+      <p>ただ、個人の数字自体は悪くありません。</p>
+      <p>撃ち合いが原因で負けているとは考えていません。</p>
+      <p>試合終盤で、人数有利な場面を落としてしまっている傾向があります。</p>
+      <p>次にサミットが来ましたら、終盤のラウンドだけを一緒に見返せば十分です。</p>
+      <p>すべてを見直す必要はありません。</p>
+      <span class="mapstat">戦績（メイン） <b>0勝 4敗</b> ／ 個人の数字は出ていますので、ご心配はいりません</span>
+    </div>
+  </article>
+
+  <!-- ===== REMEMBER ===== -->
+  <div class="remember cut">
+    <span class="micro">One thing to remember</span>
+    <p>次の試合で迷いましたら、角に差し掛かるたびに完全に止まってから覗くことだけを思い出してください。</p>
+    <p>それだけで、本日の練習は意味があったことになります。</p>
+  </div>
+
+  <!-- ===== DETAILS ===== -->
+  <details>
+    <summary>数字をご自身でも確認したい場合は、こちらを開いてください <span class="chev" aria-hidden="true">⌄</span></summary>
+    <div class="detail-body">
+      <div class="stat-grid">
+        <div class="stat"><div class="v num">229.8</div><div class="k">ACS（メイン）／ 1ラウンドあたりのダメージと活躍の平均です</div></div>
+        <div class="stat"><div class="v num">149.9</div><div class="k">ADR（メイン）／ 1ラウンドあたりの平均ダメージです</div></div>
+        <div class="stat"><div class="v num">23.5%</div><div class="k">ヘッドショット率 ／ 当たった弾の中で頭に当たった割合です</div></div>
+        <div class="stat"><div class="v num">69.4%</div><div class="k">KAST ／ キル、アシスト、生存、トレードのいずれかで関われたラウンドの割合です</div></div>
+        <div class="stat"><div class="v num">1.17</div><div class="k">K/D（メイン）／ 倒した数と倒された数の比率です</div></div>
+        <div class="stat"><div class="v num">D3</div><div class="k">現在のランク ／ ピークは Ascendant 1 です</div></div>
+      </div>
+
+      <div class="sova cut-sm">
+        <img src="assets/sova-cut.png" alt="エージェント、ソーヴァの公式アート">
+        <div>
+          <span class="micro">Honest note <b>//</b> Sova</span>
+          <p style="margin-top:6px">ソーヴァについても率直にお伝えします。ソーヴァを使用した際はACSが<b>200程度まで落ちており、普段の230近くから下がっている</b>ことが数字でも出ています。ご自身でも感覚としてお分かりかと思いますが、リコンに意識が向くと銃の方がどうしてもおろそかになります。使用する場合は、<b>リコンを出すタイミングをラウンド開始前に決めておいていただけますと助かります。</b></p>
+        </div>
+      </div>
+
+      <ul class="notes">
+        <li>チェンバーについては、他のエージェントよりも数字がはっきり良く、<b>K/Dが1.53まで出ている試合もあります。</b>無理に減らす必要はありませんが、得意な形として覚えておいてください。エージェントを絞ってほしいという話ではありませんので、その点はご安心ください。</li>
+        <li>KASTが69.4%であることは、裏を返しますと<b>約3割のラウンドでは何にも関われないまま終わってしまっている</b>ということでもあります。スキルを持ったまま倒れてしまうラウンドを少しずつ減らしていけますと、次はそこが伸びてくると考えています。</li>
+        <li>脚に当たっている弾が9.2%程度ありますので、クロスヘアをほんの少しだけ高く置く意識を持っていただきますと、頭や胴に当たる弾がその分だけ増えてくると考えています。本日の練習で置く高さを揃えているのは、そうした理由もあります。</li>
+      </ul>
+      <p class="caveats">数字の出典：tracker.gg の公開プロフィール（V26 Act 6 コンペティティブ、2026-11-19 に確認したもの）です。試合数が少ないマップの数字は、傾向としてご覧ください。課題の P082、P097、P010 は KESO COACH が実際に選んだ組み合わせで、合計は10分になっています。エージェントとマップの画像は Riot Games の公式アートで、valorant-api.com 経由で取得したものです。</p>
+    </div>
+  </details>
+
+  <footer>
+    KESO COACH トップ画面の試作です。画像：Riot Games 公式アート（Chamber / Clove / Sova / Jett、Abyss / Summit / The Range）— valorant-api.com 経由。数字：tracker.gg（2026-11-19 確認）。
+  </footer>
+</div>
+
+<script>
+  (function(){
+    var acceptBtn=document.getElementById('acceptBtn');
+    var acceptNote=document.getElementById('acceptNote');
+    acceptBtn.addEventListener('click',function(){
+      var on=acceptBtn.getAttribute('aria-pressed')==='true';
+      acceptBtn.setAttribute('aria-pressed',String(!on));
+      acceptBtn.textContent=!on?'実施を確定しました':'この内容で実施します';
+      acceptNote.hidden=on;
+    });
+    var swapBtn=document.getElementById('swapBtn');
+    swapBtn.addEventListener('click',function(){
+      var subs=document.querySelectorAll('.sub-task');
+      subs.forEach(function(el){el.style.borderColor='var(--red)';});
+      setTimeout(function(){subs.forEach(function(el){el.style.borderColor='';});},900);
+      if(subs[0]) subs[0].scrollIntoView({behavior:'smooth',block:'center'});
+    });
+    document.querySelectorAll('.sub-task').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var on=btn.getAttribute('aria-pressed')==='true';
+        btn.setAttribute('aria-pressed',String(!on));
+      });
+    });
+    /* drill timer — in-memory only */
+    var clock=document.getElementById('clock');
+    var timerBtn=document.getElementById('timerBtn');
+    var resetBtn=document.getElementById('timerReset');
+    var total=180, left=180, timerId=null;
+    function fmt(s){var m=Math.floor(s/60),r=s%60;return (m<10?'0':'')+m+':'+(r<10?'0':'')+r;}
+    function render(){clock.textContent=fmt(left);}
+    function stop(){if(timerId){clearInterval(timerId);timerId=null;}timerBtn.textContent='タイマーを開始する';}
+    document.querySelectorAll('[data-min]').forEach(function(b){
+      b.addEventListener('click',function(){
+        stop(); total=parseInt(b.getAttribute('data-min'),10)*60; left=total; render();
+      });
+    });
+    timerBtn.addEventListener('click',function(){
+      if(timerId){stop();return;}
+      timerBtn.textContent='一時停止する';
+      timerId=setInterval(function(){
+        if(left>0){left--;render();}
+        if(left<=0){stop();timerBtn.textContent='終了しました。お疲れさまでした';}
+      },1000);
+    });
+    resetBtn.addEventListener('click',function(){stop();left=total;render();timerBtn.textContent='タイマーを開始する';});
+    render();
+  })();
+</script>
+</body>
+</html>

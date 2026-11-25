@@ -1,13 +1,15 @@
 // Crown races: a normal race renamed after something that just happened to a member (3 losses in a
 // row, a broken win streak, a big KP loss...). How harsh the name is follows that person's roast level.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RACE_INTERVAL, bigRaceName, fillerCrownName, crownSlotAllowed, openRaceStart } from '../../../js/racing.js';
+import { RACE_INTERVAL, bigRaceName, fillerCrownName, crownSlotAllowed, openRaceStart, raceEvent } from '../../../js/racing.js';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { KpEnv, KpMapping } from './kp.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
+import {FUJIMURA_LATE_KIND,FUJIMURA_LATE_DAY_END,FUJIMURA_LATE_DAY_START,FUJIMURA_LATE_TITLES,FUJIMURA_LATE_SOURCE_PREFIX,fujimuraLateSlots} from './fujimura-lateness.ts';
 export type RoastLevel='mild'|'normal'|'full';
 export const ROAST_LEVELS:RoastLevel[]=['mild','normal','full'];
 export type CrownKind='streak3'|'streak5'|'streak10'|'stopped'|'night'|'back'|'melt';
-export type SpecialCrownKind='vdklastdeath';
+export type SpecialCrownKind='vdklastdeath'|'vdkseries'|'fujimura20';
 const NAMES:Record<Exclude<RoastLevel,'mild'>,Record<CrownKind,(n:string)=>string>>={
  full:{streak3:n=>`${n}戦犯レース しばくぞ杯`,streak5:n=>`${n}をみんなで介護するレース あかんかったなぁ賞`,streak10:n=>`${n}そろそろ引退しろレース 了解お兄さん杯`,stopped:n=>`${n}調子に乗った罰レース 効いてて草賞`,night:n=>`${n}もう寝ろレース マイクロスリープ杯`,back:n=>`${n}生きてた記念レース うおw杯`,melt:n=>`${n}KP溶かし大会 5億マジかw杯`},
  normal:{streak3:n=>`${n}おつかれレース 一旦な杯`,streak5:n=>`${n}がんばれレース 大丈夫だよ杯`,streak10:n=>`${n}ひと休みレース 次のVTR賞`,stopped:n=>`${n}連勝ストップ記念レース 良かったこの距離で杯`,night:n=>`${n}夜ふかしレース 寝ないチャレンジではない賞`,back:n=>`${n}おかえりレース お祭り男か杯`,melt:n=>`${n}ドンマイ大会 3がある杯`},
@@ -77,6 +79,17 @@ export async function nextCrownSlot(env:KpEnv,guild:string,now:number){
 // One free community-only memorial race; never touches wallet or existing race outcomes.
 export const VDK_SPECIAL_NAME='VDK 0デス完走目前・終了間際の1デス葬儀杯';
 export const VDK_SPECIAL_SOURCE='special:vdk-0death-lastdeath:20261102';
+// Four extra guaranteed-to-run crowns in otherwise optional 15-minute slots.
+// No additional cron, new race physics, odds change, or owner-funded purchase.
+export const VDK_SERIES_NAMES=[
+ 'VDK緊急戦犯査問杯',
+ 'VDK反省会・再履修ステークス',
+ 'VDK信頼回復チャレンジ杯',
+ 'VDK名誉挽回か再戦犯か最終決戦',
+] as const;
+export const VDK_SERIES_SOURCE_PREFIX='special:vdk-four-races:20261115:';
+const VDK_SERIES_FROM=Date.parse('2026-11-15T02:30:00+09:00');
+const VDK_SERIES_UNTIL=Date.parse('2026-11-15T22:00:00+09:00');
 const VDK_SPECIAL_FROM=Date.parse('2026-11-02T00:00:00+09:00');
 const VDK_SPECIAL_UNTIL=Date.parse('2026-11-02T18:00:00+09:00');
 const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return a?(configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]):null;};
@@ -107,6 +120,71 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
    }
   }
  }
+ // One-day VDK four-race event. Claim empty slots at least 30 minutes ahead,
+ // spaced 30 minutes apart, so the card/field is never changed after betting opens.
+ // Unique source and (guild,race) constraints make cron retries idempotent.
+ if(now>=VDK_SERIES_FROM&&now<VDK_SERIES_UNTIL){
+  const sourcePrefix=VDK_SERIES_SOURCE_PREFIX+mapping.guildId+':';
+  // D1 rejects long LIKE patterns (the guild-scoped prefix exceeds its limit).
+  // Four exact keys use the existing UNIQUE(source) index and avoid a range scan.
+  const sourceKeys=VDK_SERIES_NAMES.map((_,i)=>sourcePrefix+i);
+  const scheduled=(await env.DB.prepare('SELECT source,race FROM kp_crowns WHERE guild=? AND source IN (?,?,?,?)')
+   .bind(mapping.guildId,...sourceKeys).all<{source:string;race:number}>()).results;
+  if(scheduled.length<VDK_SERIES_NAMES.length){
+   const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
+   // A registered member who has opted out of roasting is never targeted.
+   if(!subject||await levelOf(subject.discordUserId)!=='mild'){
+    const taken=new Set((await env.DB.prepare('SELECT race FROM kp_crowns WHERE guild=? AND race>?')
+     .bind(mapping.guildId,now).all<{race:number}>()).results.map(r=>r.race));
+    let earliest=Math.ceil((now+30*60000)/RACE_INTERVAL)*RACE_INTERVAL;
+    for(let i=0;i<VDK_SERIES_NAMES.length;i++){
+     const source=sourcePrefix+i,previous=scheduled.find(c=>c.source===source);
+     if(previous){earliest=Math.max(earliest,previous.race+30*60000);continue;}
+     let claimed=false;
+     for(let race=earliest,attempt=0;attempt<96&&race<VDK_SERIES_UNTIL;attempt++,race+=RACE_INTERVAL){
+      if(bigRaceName(race)||fillerCrownName(race)||raceEvent(race)||taken.has(race))continue;
+      const saved=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
+       .bind(mapping.guildId,race,VDK_SERIES_NAMES[i],subject?.discordUserId??'VDK','vdkseries',source,now).run();
+      if(saved.meta.changes){
+       created.push({race,name:VDK_SERIES_NAMES[i],user:subject?.discordUserId??'VDK',kind:'vdkseries',special:true});
+       taken.add(race);earliest=race+30*60000;claimed=true;break;
+      }
+      // Another cron may have inserted the same source while we were scheduling.
+      const existing=await env.DB.prepare('SELECT race FROM kp_crowns WHERE source=?').bind(source).first<{race:number}>();
+      if(existing){earliest=Math.max(earliest,existing.race+30*60000);claimed=true;break;}
+      taken.add(race);
+     }
+     if(!claimed)break;
+    }
+   }
+  }
+ }
+ // November 16 only: a 24-hour parody festival with one namesake race every hour.
+ // Reserve each hourly slot 25–90 minutes before departure. This avoids dumping
+ // 24 announcements at once, and NEVER renames a card whose bets are already open.
+ // Matching an exact participant name also avoids guessing or inventing a wallet.
+ if(now>=FUJIMURA_LATE_DAY_START-90*60000&&now<FUJIMURA_LATE_DAY_END){
+  for(let hour=0;hour<24;hour++){
+   const options=fujimuraLateSlots(hour).filter(race=>now>=race-90*60000&&now<race-25*60000);
+   if(!options.length)continue;
+   const source=FUJIMURA_LATE_SOURCE_PREFIX+mapping.guildId+':'+hour;
+   if(await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(source).first())continue;
+   const members=(await kpTargetMembers(env,mapping)).filter(m=>m.name==='藤村');
+   if(members.length!==1)continue; // Fail closed for ambiguous or unregistered names.
+   const subject=members[0]!;
+   if(await levelOf(subject.id)==='mild')continue; // Respect the member's roast opt-out.
+   for(const race of options){
+    if(bigRaceName(race)||fillerCrownName(race)||raceEvent(race))continue;
+    const saved=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
+     .bind(mapping.guildId,race,FUJIMURA_LATE_TITLES[hour],subject.id,FUJIMURA_LATE_KIND,source,now).run();
+    if(saved.meta.changes){
+     created.push({race,name:FUJIMURA_LATE_TITLES[hour],user:subject.id,kind:FUJIMURA_LATE_KIND,special:true});
+     break;
+    }
+    if(await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(source).first())break;
+   }
+  }
+ }
  for(const e of await crownEvents(env,mapping,now)){
   const person=memberName(mapping,e.user);
   if(!person||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
@@ -126,5 +204,5 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
   const message=split<0?notice.message+line:notice.message.slice(0,split)+line+notice.message.slice(split);
   await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=?").bind(message,c.riotId,c.match).run();
  }
- return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':REASONS[c.kind]}));
+ return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':c.kind==='vdkseries'?'VDK戦犯特別4連戦':c.kind==='fujimura20'?'集合時間20分遅刻の反省競馬祭':REASONS[c.kind]}));
 }

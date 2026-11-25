@@ -1,0 +1,78 @@
+name: P12 duel retained ciphertext recovery drill
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/duel-retained-recovery-drill.yml'
+      - 'scripts/duel-recovery-drill-source.mjs'
+      - 'scripts/duel-d1-backup.mjs'
+      - 'services/valorant-results/test/duel-recovery-drill-source.test.mjs'
+      - 'services/valorant-results/test/duel-retained-recovery-verify.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-retained-recovery-drill.yml'
+      - 'scripts/duel-recovery-drill-source.mjs'
+      - 'services/valorant-results/test/duel-recovery-drill-source.test.mjs'
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'Successful P12 duel D1 encrypted backup workflow run ID; no production restore'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: duel-retained-ciphertext-drill
+  cancel-in-progress: false
+jobs:
+  safety-tests:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify approved provenance and fail-closed source selection
+        run: node --test services/valorant-results/test/duel-recovery-drill-source.test.mjs services/valorant-results/test/duel-retained-recovery-verify.test.mjs
+  isolated-recovery:
+    if: github.repository == 'altepop/keso-gamble' && github.event_name == 'workflow_dispatch' && github.actor == 'altepop'
+    needs: [safety-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DUEL_BACKUP_RUN_ID: ${{ inputs.backup_run_id }}
+      GITHUB_TOKEN: ${{ github.token }}
+      KESO_DUEL_BACKUP_KEY: ${{ secrets.KESO_DUEL_BACKUP_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Refuse wrong run, repository, workflow or unsuccessful backup
+        run: node scripts/duel-recovery-drill-source.mjs
+      - name: Download only the named retained ciphertext
+        uses: actions/download-artifact@v7
+        with:
+          name: keso-duel-d1-restorable-${{ inputs.backup_run_id }}
+          repository: altepop/keso-gamble
+          run-id: ${{ inputs.backup_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/duel-retained-drill
+      - name: Verify original encryption key is still available
+        run: |
+          if test -z "$KESO_DUEL_BACKUP_KEY" && test -z "$CLOUDFLARE_API_TOKEN"; then
+            echo 'Original recovery credential unavailable; no restore attempted.'
+            exit 1
+          fi
+      - name: Decrypt retained backup and restore ONLY to throwaway SQLite
+        run: |
+          umask 077
+          node scripts/duel-d1-backup.mjs verify-retained "$RUNNER_TEMP/duel-retained-drill/keso-duel-restorable.enc.json"
+          echo 'Encrypted retained artifact restored to isolated SQLite; production untouched.'
+      - name: Remove retained ciphertext from runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/duel-retained-drill"

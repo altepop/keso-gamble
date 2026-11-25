@@ -4,11 +4,10 @@
 import {NORMAL_RELIC_BY_ID} from './relic-catalog.ts';
 import type {NormalRelicRarity} from './relic-catalog.ts';
 import {relicCollection} from './relics.ts';
+import {SHARD_YIELDS} from './relic-consumables.ts';
+export {SHARD_YIELDS} from './relic-consumables.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 
-export const SHARD_YIELDS:Readonly<Record<NormalRelicRarity,number>>={
- common:1,uncommon:3,rare:9,legendary:30,mythic:80,ancient:250,transcendent:1000,
-};
 export const SHARD_PRICES:Readonly<Partial<Record<NormalRelicRarity,number>>>={
  common:15,uncommon:45,rare:130,legendary:450,
 };

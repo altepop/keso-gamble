@@ -49,6 +49,7 @@ const help = `📖 コマンド一覧
 /valo players：登録者・Riot IDの一覧
 /valo ranking [mode]：最新ACTの勝率ランキング
 /valo status：監視・API待機・送信待ちの状況
+/valo coach：KESO COACHを開く（Discordの本人認証、接続コード不要）
 
 🎯 勝敗予想
 /predict player [mode]：次の1試合の勝敗予想カードを作成（100〜100,000 KP、受付60分）
@@ -65,7 +66,7 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
   const action = interaction.data?.options?.[0];
   const allowed: Record<string, string[]> = { yesterday: ['player', 'mode'], week: ['player', 'mode'], streaks: ['player', 'mode'], players: [],
     versus: ['player', 'partner', 'mode'], compare: ['player', 'partner', 'mode'], today: ['player', 'mode'], act: ['player', 'mode'], recent: ['player', 'mode'],
-    pair: ['player', 'partner', 'mode'], ranking: ['mode'], status: [], help: [] };
+    pair: ['player', 'partner', 'mode'], ranking: ['mode'], status: [], coach: [], help: [] };
   if (!action || action.type !== 1 || !Object.hasOwn(allowed, action.name) || interaction.data?.options?.length !== 1) return help;
   const options = action.options ?? [];
   if (options.some(option => option.type !== 3 || !allowed[action.name].includes(option.name) || typeof option.value !== 'string')
@@ -81,6 +82,7 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
   if (((action.name === 'recent' || twoPlayers) && !values.player) || (twoPlayers && !values.partner)) return '対象者を指定してください。';
   if (twoPlayers && values.player === values.partner) return 'ペアは異なる2人を選んでください。';
   if (action.name === 'help') return help;
+  if (action.name === 'coach') return '🎯 KESO COACH｜本人専用のVALORANT分析\n下の「Activityを開く」からKESO PLAYへ入り、ホームの「コーチ」を押してください。Discord本人認証で自動接続するため、48桁のコード入力は不要です。\nすでにブラウザー版KESO PLAYに接続済みなら、https://altepop.github.io/keso-gamble/coach.html から直接開けます。\n個人診断は本人のみ閲覧可能です。';
   if (!players.length) return '対象者が登録されていません。';
   if (action.name === 'players') return '👥 登録者\n' + players.map(player => label(player) + '：' + clean(player.riotId, 100)).join('\n');
   const targets = !values.player || values.player === 'all' ? players : players.filter(player => player.riotId === values.player);

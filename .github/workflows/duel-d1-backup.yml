@@ -1,0 +1,69 @@
+name: P12 duel D1 encrypted backup and isolated restore
+
+# Trigger only after production Worker deploy/smoke completes successfully.
+# Only the original #768 or its #769 schema-fidelity repair can trigger this one-shot export; unrelated main pushes cannot.
+# Manual rerun remains possible, but never repeat automatically for other PRs.
+on:
+  workflow_run:
+    workflows: ['VALORANT Bot check and deploy']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: duel-d1-restorable-backup
+  cancel-in-progress: false
+
+jobs:
+  export-verify:
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'workflow_dispatch' && github.actor == 'altepop' || github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && (contains(github.event.workflow_run.head_commit.message, '#768') || contains(github.event.workflow_run.head_commit.message, '#769')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      KESO_DUEL_BACKUP_KEY: ${{ secrets.KESO_DUEL_BACKUP_KEY }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Verify existing D1 credentials and recoverable encryption key
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Cloudflare D1 account unavailable'; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Cloudflare D1 export credentials unavailable'; exit 1; }
+          if test -n "$KESO_DUEL_BACKUP_KEY"; then
+            echo 'Using dedicated backup key secret';
+          else
+            echo 'Using existing Cloudflare token as an encrypted-backup fallback; preserve the exact original token for recovery after any rotation';
+          fi
+      - name: Run isolated recovery, encryption and ownership unit tests
+        run: node --test services/valorant-results/test/duel-d1-backup.test.mjs
+      - name: Install existing pinned Wrangler without running prepare/deploy scripts
+        run: npm ci --ignore-scripts --prefix services/valorant-results
+      - name: Export production duel-owned D1 tables and verify fresh isolated SQLite restore
+        run: |
+          umask 077
+          node scripts/duel-d1-backup.mjs backup "$RUNNER_TEMP/keso-duel-restorable.enc.json"
+          node scripts/duel-d1-backup.mjs verify "$RUNNER_TEMP/keso-duel-restorable.enc.json"
+      - name: Retain only the AES-256-GCM encrypted restorable backup
+        uses: actions/upload-artifact@v7
+        with:
+          name: keso-duel-d1-restorable-${{ github.run_id }}
+          path: ${{ runner.temp }}/keso-duel-restorable.enc.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove runner ciphertext copy
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/keso-duel-restorable.enc.json"; then
+            shred -u "$RUNNER_TEMP/keso-duel-restorable.enc.json" || rm -f "$RUNNER_TEMP/keso-duel-restorable.enc.json"
+          fi

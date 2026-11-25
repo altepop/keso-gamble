@@ -1,7 +1,8 @@
 // Read-only Cloudflare D1 Insights report. Never logs SQL text, query literals, IDs, or tokens.
 // Summary totals cover the returned TOP entries, not necessarily all queries.
 import {execFileSync} from 'node:child_process';
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
+import {rankReadHotspots} from './d1-read-hotspots.mjs';
 const databases=[
  ['D1-A','93625c27-74b4-4154-a0a5-2d7485083f33'],
  ['D1-B','bf23ab40-814f-4626-9e0b-36739ac41750'],
@@ -10,6 +11,9 @@ const out=['# D1 1-hour and 24-hour read audit','','Values are sourced from Clou
 '**Warning:** These are top-50 *lower bounds*, not an account total, because query types outside the top 50 are not listed. Queries after the read cap is exceeded may be blocked.','',
 '| Window | Database | Top SQL forms returned | Calls (top 50) | Rows read (top 50) | Avg rows/call |',
 '|:---|:---|---:|---:|---:|---:|'];
+const hourlyHotspots=['','## Highest 1-hour SQL shapes (top-50 lower bound, sanitized)','',
+ '| Database | Rank | Operation | Tables | Calls | Rows read | Share of returned top-50 |',
+ '|:---|---:|:---|:---|---:|---:|---:|'];
 const detail=['','## Top 20 shapes per window','','| Window | Database | Rank | Tables | Calls | Rows read | Rows/call | SQL type |','|:---|:---|---:|:---|---:|---:|---:|:---|'];
 const fmt=n=>Number(n).toLocaleString('en-US');
 // 80k Rows read/h is an early-warning ceiling (~1.92M/day if sustained).
@@ -30,7 +34,18 @@ if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID){
   const num=(value)=>Number.isFinite(Number(value))?Number(value):0;
   const totalRead=rows.reduce((n,x)=>n+num(x.totalRowsRead),0);
   const totalCalls=rows.reduce((n,x)=>n+num(x.numberOfTimesRun),0);
-  if(period==='1h'){read1h+=totalRead;oneHourOk++;}
+  if(period==='1h'){
+   read1h+=totalRead;oneHourOk++;
+   for(const [rank,hotspot] of rankReadHotspots(rows,5).entries()){
+    const safe=[label,rank+1,hotspot.operation,hotspot.tables,
+     fmt(hotspot.calls),fmt(hotspot.read),hotspot.sharePercent+'%'];
+    hourlyHotspots.push('| '+safe.join(' | ')+' |');
+    console.log('D1_READ_HOTSPOT_1H '+label+' rank='+(rank+1)+
+     ' op='+hotspot.operation+' tables='+hotspot.tables.replace(/\\s/g,'_')+
+     ' calls='+hotspot.calls+' rows='+hotspot.read+
+     ' share_top50_percent='+hotspot.sharePercent);
+   }
+  }
   out.push('| '+[period,label,rows.length,fmt(totalCalls),fmt(totalRead),
    totalCalls?fmt(Math.round(totalRead/totalCalls)):'0'].join(' | ')+' |');
   for(const [index,row] of rows.slice(0,20).entries()){
@@ -69,4 +84,19 @@ console.log('D1_READ_AUDIT_DONE successes='+success+' errors='+errors);
 if(!success||oneHourOk<databases.length)process.exitCode=1;
 
 if(process.env.GITHUB_STEP_SUMMARY)
- appendFileSync(process.env.GITHUB_STEP_SUMMARY,out.concat(detail).join('\n')+'\n');
+ appendFileSync(process.env.GITHUB_STEP_SUMMARY,out.concat(hourlyHotspots,detail).join('\n')+'\n');
+// Retain a minimal, sanitized machine-readable incident report for a separate
+// GitHub-only notification step. Never print SQL, credentials, guild/user IDs,
+// raw D1 results, or treat top-50 lower bounds as account-wide totals.
+if(process.env.D1_READ_AUDIT_REPORT){
+ const state=oneHourOk===databases.length && read1h>WARN_ROWS_PER_HOUR
+  ?'warning':success===4&&errors===0&&oneHourOk===databases.length
+   ?'healthy':'unknown';
+ writeFileSync(process.env.D1_READ_AUDIT_REPORT,JSON.stringify({
+  state,ok:state==='healthy',threshold:WARN_ROWS_PER_HOUR,
+  readLowerBound:oneHourOk===databases.length?Math.floor(read1h):null,
+  oneHourSources:oneHourOk,insightsWindows:success,insightsErrors:errors,
+  source:'top-50-insights-lower-bound',hardCapConfigured:false
+ }),{mode:0o600});
+}
+

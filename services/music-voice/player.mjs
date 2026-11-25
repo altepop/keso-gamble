@@ -1,12 +1,14 @@
 import {existsSync} from 'node:fs';
+import {Readable} from 'node:stream';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {joinVoiceChannel,createAudioPlayer,createAudioResource,AudioPlayerStatus,
- NoSubscriberBehavior,entersState,VoiceConnectionStatus} from '@discordjs/voice';
+ NoSubscriberBehavior,entersState,VoiceConnectionStatus,StreamType} from '@discordjs/voice';
 import ffmpegStatic from 'ffmpeg-static';
 import {ChannelType} from 'discord.js';
 import catalog from './catalog.json' with {type:'json'};
 import {MusicQueue} from './queue.mjs';
+import {duelCuePcm,validDuelCue} from './duel-cue.mjs';
 
 if(ffmpegStatic)process.env.FFMPEG_PATH=ffmpegStatic;
 function durationSec(path){
@@ -37,6 +39,51 @@ export class MusicController {
   this.locks.set(guild,work);try{return await work;}finally{if(this.locks.get(guild)===work)this.locks.delete(guild);}
  }
  session(guild){return this.rooms.get(guild)??null;}
+
+ /** Optional post-commit duel cue sent into an ALREADY connected music VC.
+  * Never joins an unrelated channel, changes the playlist, or grants KP.
+  * A 400ms chime temporarily pauses the music player and restores its place.
+  */
+ async playDuelCue({guildId,kind,matchId,version}){
+  if(!/^\d{15,22}$/.test(guildId??'')||!validDuelCue({kind,matchId,version}))
+   throw Error('invalid_duel_cue');
+  return this.locked(guildId,async()=>{
+   const room=this.session(guildId);
+   if(!room||room.closed)return {played:false,reason:'no_connected_voice_channel'};
+   const guild=this.client.guilds.cache.get(guildId);
+   if(!guild||!this.client.isReady())return {played:false,reason:'bot_unavailable'};
+   const humans=[...guild.voiceStates.cache.values()].some(v=>
+    v.channelId===room.channelId&&v.id!==this.client.user?.id&&!v.member?.user?.bot);
+   if(!humans)return {played:false,reason:'empty_voice_channel'};
+   const now=Date.now();
+   if(now-(room.lastDuelCueAt??0)<5_000)return {played:false,reason:'cue_rate_limited'};
+   room.lastDuelCueAt=now;
+   const playing=room.player.state.status===AudioPlayerStatus.Playing;
+   const chime=createAudioPlayer({behaviors:{noSubscriber:NoSubscriberBehavior.Pause}});
+   let timer;
+   try{
+    if(playing)room.player.pause(true);
+    const result=new Promise(resolve=>{
+     chime.once(AudioPlayerStatus.Idle,()=>resolve('completed'));
+     chime.once('error',()=>resolve('audio_error'));
+     timer=setTimeout(()=>resolve('cue_timeout'),1500);timer.unref?.();
+    });
+    room.connection.subscribe(chime);
+    chime.play(createAudioResource(Readable.from([duelCuePcm(kind)]),{inputType:StreamType.Raw}));
+    const status=await result;
+    return {played:status==='completed',reason:status};
+   }finally{
+    if(timer)clearTimeout(timer);
+    chime.stop(true);
+    // A simultaneous music leave/connection close must never reopen a room.
+    if(!room.closed){
+     try{room.connection.subscribe(room.player);if(playing)room.player.unpause();}
+     catch{console.warn('duel_cue_music_restore_pending');}
+    }
+   }
+  });
+ }
+
  async request({guildId,userId,action,track,volume,loop}){
   if(!/^\d{15,22}$/.test(guildId)||!/^\d{15,22}$/.test(userId))throw Error('Discordユーザーを確認できない。');
   return this.locked(guildId,async()=>{

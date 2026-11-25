@@ -62,9 +62,69 @@ let browser;const errors=[],requests=[];
  assert.equal(await page.locator('.duel-showdown').count(),0);
  await page.locator('[data-demo-play=two]').click();
  assert.equal(await page.locator('body.cpu-practice').count(),0);
- assert.equal(await page.locator('#duel-game option').count(),6);
+ assert.equal(await page.locator('#duel-game option').count(),7);
  await page.locator('[data-demo-play=cpu]').click();
  assert.equal(await page.locator('body.cpu-practice').count(),1);
+
+ // Regress the actual Activity -> CPU -> Activity flow. A full page navigation
+ // destroys KESO PLAY MUSIC's Audio object and can re-trigger Discord auth.
+ const host=await context.newPage();
+ host.on('pageerror',err=>errors.push('Activity: '+err.message));
+ await host.goto('http://127.0.0.1:'+port+'/index.html',{waitUntil:'domcontentloaded'});
+ await host.locator('.title-start').click();
+ await host.locator('.nav-btn[data-screen=race]').click();
+ await host.locator('.sub-tab[data-screen=duels]').click();
+ // Start (or keep) the original audio with a genuine user gesture.
+ await host.locator('#keso-music .music-open').click();
+ if(!await host.evaluate(()=>globalThis.KesoMusic?.getState()?.playing)){
+  await host.locator('#music-play').click();
+ }
+ await host.waitForFunction(()=>globalThis.KesoMusic?.getState()?.playing,null,{timeout:8000});
+ await host.locator('.music-close').click();
+ const before=await host.evaluate(()=>{window.__practiceHostAlive=true;return KesoMusic.getState();});
+ assert.equal(await host.locator('#duel-entry-home [data-duel-entry]').count(),3);
+  await host.locator('[data-duel-entry="practice"]').click();
+  const practiceLink=host.locator('.duel-practice-entry a[href*="duel-demo.html"]');
+ 
+ await practiceLink.click();
+ const practice=host.frameLocator('#keso-cpu-practice-overlay iframe');
+ await practice.locator('body.cpu-practice').waitFor();
+ assert.match(await practice.locator('#demo-notice').innerText(),/実KPは変動せず/);
+ assert.equal(await host.evaluate(()=>location.pathname),'/index.html','original Activity URL remains');
+ await host.waitForTimeout(900);
+ const during=await host.evaluate(()=>KesoMusic.getState());
+ assert.equal(during.playing,true,'music must not pause upon entering CPU practice');
+ assert.equal(during.track,before.track);
+ assert.ok(during.currentTime>=before.currentTime,'music should preserve its play position');
+ await practice.locator('[data-demo-return]').click();
+ await host.locator('#keso-cpu-practice-overlay').waitFor({state:'detached'});
+ assert.equal(await host.evaluate(()=>window.__practiceHostAlive),true,'return must not reload the Activity');
+ assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'music continues after return');
+ await practiceLink.waitFor({state:'visible'});
+  assert.equal(await practiceLink.count(),1);
+  const activityBeforeUrl=host.url();
+  // Sport buttons must open inside the overlay, not restart Discord Activity.
+  await host.locator('[data-duel-practice-game="gomoku"]').click();
+  await practice.locator('body.cpu-practice').waitFor();
+  assert.equal(await practice.locator('#demo-mode').inputValue(),'gomoku','selected sport opens in CPU practice');
+  assert.equal(host.url(),activityBeforeUrl,'sport choice keeps the original Activity URL');
+  assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'sport choice keeps music playing');
+  await practice.locator('[data-demo-return]').click();
+  await host.locator('#keso-cpu-practice-overlay').waitFor({state:'detached'});
+  await host.locator('[data-duel-entry-back]').click();
+  assert.equal(await host.locator('#duel-entry-home [data-duel-entry]').count(),3);
+  const activityBefore=host.url();
+  await host.locator('[data-duel-entry="pve"]').click();
+  assert.equal(host.url(),activityBefore,'PvE stays in the same Activity');
+  await host.locator('#duel-pve-section .duel-pve-stage-head').waitFor();
+ assert.equal(host.url(),activityBefore,'PvE cannot restart Discord Activity');
+ assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'PvE keeps the music player alive');
+ await host.locator('details.duel-secondary summary').click();
+  await host.locator('[data-duel-pve-rewards]').click();
+ await host.locator('#duel-rewards-in-app').waitFor();
+ assert.equal(host.url(),activityBefore,'rewards cannot restart Discord Activity');
+ assert.equal(await host.evaluate(()=>window.__practiceHostAlive),true,'PvE return never reboots KESO PLAY');
+ await host.close();
  assert.deepEqual(errors,[],'console page errors');
  assert.deepEqual(requests,[],'practice never sends API requests');
  console.log('6 CPU modes passed in',engine,'with no network KP requests');

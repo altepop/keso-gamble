@@ -1,0 +1,47 @@
+/* Server-authoritative PvE panel, isolated from PvP game components. */
+.duel-pve-panel{margin:12px 0;border:1px solid #477e91;border-radius:12px;background:#102534;color:#ecf9ff;overflow:hidden}
+.duel-pve-panel>summary{cursor:pointer;display:list-item;font-weight:800;font-size:16px;padding:13px 15px}
+.duel-pve-panel .card-body{padding:12px;display:grid;gap:12px}
+.duel-pve-panel .helper{color:#d9e9f3;line-height:1.6;margin:0}
+.duel-pve-status{padding:9px 12px;background:#16423e;color:#fff;border-radius:8px;font-weight:800;margin:0}
+.duel-pve-config{display:flex;flex-wrap:wrap;gap:9px;align-items:end}
+.duel-pve-config label,.duel-pve-actions label{display:grid;gap:5px;font-size:13px;min-width:112px;flex:1}
+.duel-pve-config select,.duel-pve-actions input,.duel-pve-actions select{width:100%;height:44px;color:#f6ffff;border:1px solid #6997aa;border-radius:8px;background:#102738;padding:6px 8px;font-size:16px}
+.duel-pve-config .action-btn{min-height:44px}
+.duel-pve-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.duel-pve-actions .action-btn{min-height:44px}
+.duel-pve-board-wrap{width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-gutter:stable}
+.duel-pve-board{display:grid;grid-template-columns:repeat(var(--pve-size),minmax(0,1fr));width:min(100%,400px);aspect-ratio:1;background:#0b2a2c;border:2px solid #1d9c86;border-radius:6px;overflow:hidden}
+.duel-pve-board-wrap.wide .duel-pve-board{width:660px;max-width:none;aspect-ratio:1}
+.duel-pve-cell{min-width:0;min-height:0;aspect-ratio:1;border:1px solid #286259;background:#134d45;color:#f8fff9;display:grid;place-items:center;font-size:clamp(13px,3vw,23px);padding:0;touch-action:manipulation}
+.duel-pve-board-wrap.wide .duel-pve-cell{font-size:20px}
+.duel-pve-cell.human{color:#fbfbfb}
+.duel-pve-cell.cpu{color:#ff7883}
+.duel-pve-cell.empty:not(:disabled){background:#1e675c;cursor:pointer}
+.duel-pve-cell[aria-pressed=true]{outline:3px solid #ffe49d;outline-offset:-3px}
+.duel-pve-columns{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.duel-pve-columns .action-btn{font-size:12px;min-width:0;padding:8px 0;min-height:44px}
+.duel-pve-connect-board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:7px;background:#134a81;border-radius:10px;width:min(100%,410px)}
+.duel-pve-disc{display:grid;place-items:center;aspect-ratio:1;border-radius:50%;background:#092437;color:#496576;font-size:26px}
+.duel-pve-disc.human{background:#ffb536;color:#9a4d11}
+.duel-pve-disc.cpu{background:#f16c72;color:#bd2738}
+.duel-pve-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.duel-pve-card{height:83px;background:#f4f7fa;color:#172c40;border-radius:8px;border:2px solid #5984a0;font-size:clamp(12px,3vw,19px);font-weight:800;padding:2px;touch-action:manipulation}
+.duel-pve-card[aria-pressed=true]{border-color:#ff4655;outline:2px solid #ff4655;background:#f9e8e9}
+.duel-pve-die{display:inline-grid;place-items:center;min-width:36px;height:36px;margin:2px;border-radius:8px;background:#edf3fa;color:#12344a;font-size:19px}
+.duel-pve-panel details summary{cursor:pointer;font-weight:650}
+.duel-pve-panel ol{padding-left:22px;max-height:250px;overflow:auto}
+.duel-pve-panel button:disabled{opacity:.48;cursor:not-allowed}
+@media(max-width:390px){.duel-pve-panel .card-body{padding:9px}.duel-pve-config{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.duel-pve-config .action-btn{grid-column:1 / -1}.duel-pve-board-wrap.wide .duel-pve-board{width:660px}}
+@media(prefers-reduced-motion:reduce){.duel-pve-panel,.duel-pve-panel *{animation:none!important;transition:none!important}}
+
+.duel-reward-panel { margin-top: 1rem; padding: .75rem; }
+.duel-reward-panel summary, .duel-pve-panel details summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.duel-reward-panel ul { display: grid; gap: .5rem; padding-inline-start: 1.25rem; }
+.duel-reward-panel li span { display: inline-block; margin-inline-start: .35rem; }
+.pve-build-choice { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.pve-build-choice select { min-height: 44px; max-width: 100%; }

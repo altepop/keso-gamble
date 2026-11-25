@@ -1,3 +1,14 @@
+import {refundDueDirectives} from './kp-directive-lifecycle.ts';
+import {syncCoachProfiles} from './coach-identity.ts';
+import {provisionConfirmedCoachRosterConsents} from './coach-team-default-consents.ts';
+import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
+import {captureCompetitivePositions} from './coach-position-storage.ts';
+import {coachPositionQuality} from './coach-position-quality.ts';
+import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
+import {coachProviderShape} from './coach-provider-shape.ts';
+import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
+import {postCoachPersonalFeedback} from './coach-personal-feedback.ts';
+import {replaySavedCoachFeedback} from './coach-feedback-replay.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
@@ -15,11 +26,18 @@ import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
+import {queueVdkLossPress} from './vdk-bankruptcy-loss-press.ts';
 import {queueSteamPosts} from './steam-posts.ts';
 import {ensureNotificationReadIndexes} from './notification-indexes.ts';
 import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
 import {cleanupMonitorData} from './monitor-cleanup.ts';
+import {recordCompetitiveRoster} from './match-rosters.ts';
+import {recordCompetitiveRoundEvents} from './round-events.ts';
+import {backfillRecordedVdkMatches} from './roster-backfill.ts';
+import {backfillVdkRoundEvents} from './round-backfill.ts';
+import {discoverCoachMemberPage} from './coach-member-archive.ts';
+import {recoverVdkV2Kills,type LegacyV2} from './coach-v2-recovery.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -41,6 +59,9 @@ import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import {ensurePvpDuels,settlePvpDuels} from './pvp-duel.ts';
 import {settleExpiredBoardDuels,cleanupBoardDuels} from './board-duels.ts';
+import {duelOperationsAudit} from './duel-operations-audit.ts';
+import {archivePreviousDuelSeason,shouldArchiveDuelSeason} from './duel-season-archive.ts';
+import {shouldRunDuelDailyAudit} from './duel-season.ts';
 import type { KpRun } from './kp.ts';
 import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
@@ -79,6 +100,7 @@ export interface Env {
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
   KP_EARNINGS_WEBHOOK_URL?: string;
+  KESO_COACH_WEBHOOK_URL?: string;
   MAHJONG_INGEST_KEY?: string;
   AMAE_KOROMO_TOKEN?: string;
   PAIPU_DISPATCH_TOKEN?: string;
@@ -165,6 +187,18 @@ async function api<T>(env: Env, path: string): Promise<T> {
   if (!response.ok) throw new Error(`Match API HTTP ${response.status}`);
   const body = await response.json() as { data: T };
   if (body.data === undefined) throw new Error('Unexpected API data');
+  try{if(path.startsWith('/valorant/v4/match/')||path.startsWith('/valorant/v4/matches/')||path.startsWith('/valorant/v4/by-puuid/matches/')){
+    let observed:ReturnType<typeof coachProviderShape>=null;
+    let positionEvidence:ReturnType<typeof coachPositionQuality>=null;
+    for(const raw of (Array.isArray(body.data)?body.data:[body.data])){
+      const shape=coachProviderShape(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');if(shape&&raw&&typeof raw==='object'){
+        Object.defineProperty(raw,'_coachProviderShape',{value:shape,enumerable:false,configurable:true});
+        if(!observed||shape.queue==='competitive'&&observed.queue!=='competitive'||shape.queue===observed.queue&&shape.completed&&!observed.completed){observed=shape;positionEvidence=coachPositionQuality(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');}
+      }
+    }
+    if(observed)console.info('coach_provider_shape',observed);
+    if(positionEvidence)console.info('coach_position_quality',positionEvidence);
+  }}catch{console.info('coach_provider_shape_unavailable');}
   return body.data;
 }
 
@@ -288,6 +322,16 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
+    // A compact roster is saved only for new competitive results; failures must
+    // never block notices or KP, and duplicates never incur extra writes.
+    try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
+    try { await recordCompetitiveRoundEvents(env.DB,match); } catch { console.warn('round_event_save_pending'); }
+    await captureCompetitivePositions(env.DB,match,'history');
+    if(mode==='competitive'&&kpRun&&env.KESO_COACH_WEBHOOK_URL){
+      try{const status=await postCoachPersonalFeedback(env,kpRun.mapping,match.metadata.match_id,account.puuid,result.endedAt);
+        if(status!=='suppressed'&&status!=='incomplete'&&status!=='duplicate')console.info('coach_personal_feedback',{status});
+      }catch{console.warn('coach_personal_feedback_pending');}
+    }
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {
       const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
@@ -485,6 +529,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
       .map(e=>JSON.stringify([e.riot,e.mode])) : []);
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
+    let coachEvidenceBudget=2;
     let pvpExtraDetail=1;
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
@@ -521,6 +566,12 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
+          if(coachEvidenceBudget>0){
+            coachEvidenceBudget--;
+            try{if(await enrichExistingCoachEvidence(env.DB,match)==='skipped')coachEvidenceBudget++;
+              else await captureCompetitivePositions(env.DB,match,'history');}
+            catch{console.warn('coach_evidence_enrichment_pending');}
+          }
           if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
             pvpSeen.add(match.metadata.match_id);
             try {
@@ -575,7 +626,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     } catch(error) {console.warn('prediction_recovery_pending',{reason:diagnosticReason(error)});}
     if (!players.length) return;
     await flushNotifications(env, players);
-    try {const mapping=await initializeKp(env);if(mapping)await flushKpDirectives(env,mapping);}catch{console.warn('kp_directive_delivery_pending');}
+    try {const mapping=await initializeKp(env);if(mapping){if(kpRun?.directiveRefundDue)await refundDueDirectives(env,mapping);await flushKpDirectives(env,mapping);}}catch{console.warn('kp_directive_delivery_pending');}
 
   } finally {
     runApiBudget.delete(env);
@@ -589,6 +640,8 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/vdk-rescue-press/status')
+      return vdkRescueStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({posted:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/escalation-press/status')
       return escalationPressStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({posted:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
@@ -616,6 +669,60 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if(escaPressActive(Date.now()))ctx.waitUntil(approvedEscalationPress(env).catch(()=>console.warn('approved_escalation_press_unknown')));
+    if(env.KESO_COACH_WEBHOOK_URL)ctx.waitUntil(vdkRescuePress(env).catch(()=>console.warn('vdk_rescue_press_unknown')));
+    // Separate, idempotent identity provisioning from trusted KP links. Never
+    // changes rewards or fails the monitor, and page reads remain read-only.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
+      ctx.waitUntil(track(env,'coach_identity',async()=>{
+        const mapping=await initializeKp(env);if(!mapping)return;
+        console.info('coach_identity_sync',await syncCoachProfiles(env.DB,mapping));
+        console.info('coach_roster_consent_defaults',await provisionConfirmedCoachRosterConsents(env.DB,mapping));
+      }));
+    // The archival backfill is DB-opt-in and strictly isolated from notices and KP.
+    // At most one extra Henrik detail call per five minutes; stop automatically when complete.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)
+      ctx.waitUntil(track(env,'roster_backfill',async()=>{
+        const outcome=await backfillRecordedVdkMatches(env.DB,
+          (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(outcome.status!=='disabled')console.info('roster_backfill_result',{status:outcome.status});
+      }));
+    // Bounded multi-member archive, separately opted in by the authenticated owner.
+    // Henrik lifetime has incomplete historical coverage: report actual status, never "all games".
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===1)
+      ctx.waitUntil(track(env,'coach_member_discovery',async()=>{
+        const step=await discoverCoachMemberPage(env.DB,async riotId=>{
+          const account=await env.DB.prepare('SELECT puuid,region FROM tracked_players WHERE riot_id=?')
+           .bind(riotId).first<{puuid:string;region:string}>();
+          if(account?.puuid&&account?.region)return account;
+          const at=riotId.lastIndexOf('#');
+          if(at<=0)throw Error('Invalid Riot ID');
+          return api<{puuid:string;region:string}>(env,
+           '/valorant/v2/account/'+encodeURIComponent(riotId.slice(0,at))+'/'+encodeURIComponent(riotId.slice(at+1)));
+        },(region,puuid,page,size)=>api<unknown>(env,
+         '/valorant/v1/by-puuid/lifetime/matches/'+encodeURIComponent(region)+'/'+encodeURIComponent(puuid)+
+         '?mode=competitive&size='+size+'&page='+page));
+        if(step!=='disabled'&&step!=='idle')console.info('coach_member_discovery',{status:step});
+      }));
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===3)
+      ctx.waitUntil(track(env,'coach_member_archive',async()=>{
+        const step=await runCoachPositionArchiveSlot(env.DB,
+         (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(step.archive!=='disabled'&&step.archive!=='idle')console.info('coach_member_archive',{status:step.archive});
+        if(step.positions&&step.positions!=='disabled'&&step.positions!=='idle')console.info('coach_position_backfill',{status:step.positions});
+      }));
+    // Dedicated opt-in historical round replay: at most one match detail call per five minutes.
+    // Uses a different minute than the roster backfill and cannot modify notices or KP.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===4)
+      ctx.waitUntil(track(env,'coach_round_backfill',async()=>{
+        const outcome=await backfillVdkRoundEvents(env.DB,
+          (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(outcome.status!=='disabled')console.info('coach_round_backfill_result',{status:outcome.status});
+        // The v4 source lacked kills for one already-opted-in archived match.
+        // Run at most one v2 lookup from the same Cron slot after v4 is sealed.
+        const legacy=await recoverVdkV2Kills(env.DB,
+          (id)=>api<LegacyV2>(env,'/valorant/v2/match/'+encodeURIComponent(id)));
+        if(legacy!=='disabled')console.info('coach_v2_recovery_result',{status:legacy});
+      }));
     // Read-only ping on the existing Cron, no D1 and no new scheduled trigger.
     if(Math.floor((_event.scheduledTime??Date.now())/60_000)%5===0)
       ctx.waitUntil(musicKeepalive(env,musicDiscord.workerUrl)
@@ -627,6 +734,32 @@ export default {
       ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
        .catch(()=>console.warn('board_duel_retention_pending')));
     }
+    // Phase 12: use the existing cron once daily for an owner-safe, read-only
+    // retention count. Never delete duel records or trigger KP rewards.
+    if(shouldRunDuelDailyAudit(_event.scheduledTime??Date.now()))
+      ctx.waitUntil((async()=>{
+        const mapping=await initializeKp(env);if(!mapping)return;
+        const audit=await duelOperationsAudit({DB:env.DB},mapping.guildId);
+        console.info('duel_daily_readonly_audit',{
+          staleFinishedPve:audit.counts.staleFinishedPve,
+          staleFinishedPvp:audit.counts.staleFinishedPvp,
+          activePve:audit.counts.activePve,
+          activePvp:audit.counts.activePvp,
+          reviewRecommended:audit.reviewRecommended,
+          deletionAuthorized:false
+        });
+      })().catch(()=>console.warn('duel_daily_readonly_audit_pending')));
+    // One immutable weekly snapshot on the existing cron. No payouts or KP writes.
+    // A bounded result is required; partial rankings are never persisted.
+    if(shouldArchiveDuelSeason(_event.scheduledTime??Date.now()))
+      ctx.waitUntil((async()=>{
+        const mapping=await initializeKp(env);if(!mapping)return;
+        const result=await archivePreviousDuelSeason(env,mapping.guildId,_event.scheduledTime);
+        console.info('duel_weekly_season_archive',{
+          seasonId:result.seasonId,status:result.status,
+          ...(result.status==='archived'?{sampledMatches:result.sampledMatches}:{})
+        });
+      })().catch(()=>console.warn('duel_weekly_season_archive_pending')));
     // Register only /predict through scoped client credentials. No new Bot Token secret is needed.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
       ctx.waitUntil(track(env,'prediction_command',()=>ensurePredictionCommand(env).then(ok=>{
@@ -662,6 +795,18 @@ export default {
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
     ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
     ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
+    // Replay recent stored competitive results with no personal feedback receipt.
+    // The original sender still checks identity, consent, preferences, swing
+    // evidence and an atomic receipt claim. Never reset claimed/unknown receipts.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)
+      ctx.waitUntil(track(env,'coach_personal_feedback_replay',async()=>{
+        const mapping=await initializeKp(env);
+        if(!mapping)return;
+        const result=await replaySavedCoachFeedback(env,mapping);
+        if(result.attempted)console.info('coach_personal_feedback_replay',{
+          attempted:result.attempted,posted:result.posted,statuses:result.statuses
+        });
+      }));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil(track(env,'spike_compensation',async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
@@ -699,7 +844,7 @@ export default {
       // Cloudflare may execute a cron a little late; use its intended minute for the 18:00 catch-up.
       if(shouldRunMlCron(_event.scheduledTime??Date.now()))
         await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
-      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await queueCommunityNews(env).catch(()=>console.warn('community_news_pending'));await queueRelicPress(env).catch(()=>console.warn('relic_press_pending'));await flushRacePosts(env);});
+      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await queueVdkLossPress(env).catch(()=>console.warn('vdk_loss_press_pending'));await queueCommunityNews(env).catch(()=>console.warn('community_news_pending'));await queueRelicPress(env).catch(()=>console.warn('relic_press_pending'));await flushRacePosts(env);});
       await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
     })().catch(()=>console.warn('race_settlement_pending')));
   },

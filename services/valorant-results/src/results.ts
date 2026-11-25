@@ -1,3 +1,4 @@
+import type {CoachProviderShape} from './coach-provider-shape.ts';
 import { storedMode, modeLabel, isSoloMode } from './modes.ts';
 import { deathUnratedMessage } from './death-unrated.ts';
 import { DEATH_CLOSING_LINE, deathName, deathStoredMode, isDeathMode, isDeathNotice } from './death-modes.ts';
@@ -5,6 +6,8 @@ import { commentPools as taunts, resultComment } from './comments.ts';
 
 export type Outcome = 'win' | 'loss' | 'draw';
 export interface Match {
+  /** Internal observation of direct v4 payload fields, never a provider assertion. */
+  _coachProviderShape?:CoachProviderShape;
   metadata: {
     match_id: string; is_completed: boolean; started_at: string;
     game_length_in_ms: number; queue: { id: string };
@@ -12,11 +15,21 @@ export interface Match {
     map?: { name?: string } | null;
   };
   players: Array<{
-    puuid: string; team_id: string; party_id?: string | null; agent?: { id?: string; name?: string } | null;
-    stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number } | null;
+    puuid: string; team_id: string; name?: string; tag?: string; party_id?: string | null; agent?: { id?: string; name?: string } | null;
+    ability_casts?:unknown;
+    stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number; damage?: { dealt?: number; received?: number } | null } | null;
   }>;
-  rounds?: Array<{ id: number }>;
-  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
+  rounds?: Array<{
+    id: number;
+    winning_team?: string | null;
+    attacking_team?: string | null;
+    defending_team?: string | null;
+    winning_team_role?:unknown;
+    stats?: unknown;
+    plant?: unknown;
+    defuse?: unknown;
+  }>;
+  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string }; assistants?: Array<{puuid?:string}> | null; weapon?:unknown }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
 export interface Notice {

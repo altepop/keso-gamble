@@ -72,7 +72,7 @@ let browser;
    const body=legacy?readFileSync(resolve(__dirname,'../tests/fixtures/legacy-casino.js')):revision?require('node:child_process').execFileSync('git',['show',revision+':'+require('node:path').relative(resolve(__dirname,'..'),file)],{cwd:resolve(__dirname,'..')}):readFileSync(file);
    await route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html',body});
   });
-  await page.goto('https://100000000000000000.discordsays.com/?frame_id=frame&instance_id=instance&platform='+(engineName==='webkit'||scenario.includes('touch')?'mobile&mobile_app_version=300.0':'desktop')+(scenario.startsWith('guild-')?'&guild_id=100000000000000100&channel_id=100000000000000101':''));
+  await page.goto('https://100000000000000000.discordsays.com/?frame_id=frame&instance_id=instance&platform='+(engineName==='webkit'||scenario.includes('touch')?'mobile&mobile_app_version=300.0':'desktop')+(scenario.startsWith('guild-')?'&guild_id=100000000000000100&channel_id=100000000000000101':''),scenario==='stalled-module'?{waitUntil:'commit'}:undefined);
   if(process.env.KESO_EXPECT_LEGACY_FAILURE){
    await legacyFailure;
    assert.ok(errors.some(message=>message.includes('validCard')),JSON.stringify(errors));assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),[]);assert.equal(await page.locator('.title-screen').count(),0);
@@ -118,8 +118,10 @@ let browser;
      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
      const previousReads=stateReads,refreshed=page.waitForResponse(r=>r.url().endsWith('/state'));await page.clock.fastForward(15000);await refreshed;assert.ok(stateReads>previousReads);await page.waitForTimeout(50);
      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-    }else await page.locator('.title-start').tap({timeout:2500});
-    await page.locator('.nav-btn[data-screen=play]').waitFor({timeout:2500});await page.locator('.nav-btn[data-screen=play]').tap();assert.match(await page.locator('#app').innerText(),/プレイで稼ぐ/);
+    // WebKit on busy CI runners can take more than 2.5 s to settle the animated mobile button.
+    // Retain a real (non-forced) touch so overlays or blocked input still fail the test.
+    }else await page.locator('.title-start').tap({timeout:10000});
+    await page.locator('.nav-btn[data-screen=play]').waitFor({timeout:10000});await page.locator('.nav-btn[data-screen=play]').tap();assert.match(await page.locator('#app').innerText(),/プレイで稼ぐ/);
    }
    if(scenario==='success'){
     await page.locator('.title-start').filter({hasText:'900'}).click();

@@ -1,4 +1,5 @@
 import {activityLaunchComponents} from './activity-link.ts';
+import {DuelEventHub} from './duel-events.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -18,7 +19,7 @@ export async function ensureBroadcast(env:KpEnv){
   env.DB.prepare('CREATE INDEX IF NOT EXISTS race_broadcast_video ON race_broadcasts(video,race)'),
  ]);ready.add(env.DB);
 }
-export function raceShow(card:any,seed:string,special=false):RaceShow{
+export function raceShow(card:any,seed:string,special=false,series=false):RaceShow{
  const result=raceResult(card,seed),timeline=raceTimeline(card,result,seed);
  const regular=raceCommentary(card,result,timeline,raceOdds(card),seed);
  // Narrative only: horses, odds, seed, race order and actual KP remain unchanged.
@@ -30,8 +31,14 @@ export function raceShow(card:any,seed:string,special=false):RaceShow{
   {t:42000,text:'あああああ！終了間際に1デス！0デスの夢、ゴール直前で粉砕！'},
   {t:49000,text:'0デスで伝説になるはずが、1デスで伝説に！VDK、歴史的やらかし達成！'},
  ]:[];
+ const vdkSeries=series?[
+  {t:0,text:'緊急開催！VDK戦犯特別4連戦、開幕です！'},
+  {t:15000,text:'言い訳は一旦置いといて、馬たちの走りを見届けましょう！'},
+  {t:30000,text:'ここから最終直線！VDK、名誉挽回のチャンスはまだあるのか！'},
+  {t:49000,text:'判定確定！勝負は公正、戦犯裁判の判決は観客の皆さんにお任せします！'},
+ ]:[];
  // Renderer receives no seed, owner IDs, account balances or private API credentials.
- return {card:{id:card.id,start:card.start,name:card.name,size:card.size,...(card.event?{event:card.event}:{}),horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:[...regular,...vdk].sort((a,b)=>a.t-b.t),odds:raceOdds(card)};
+ return {card:{id:card.id,start:card.start,name:card.name,size:card.size,...(card.event?{event:card.event}:{}),horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:[...regular,...vdk,...vdkSeries].sort((a,b)=>a.t-b.t),odds:raceOdds(card)};
 }
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'').slice(0,65);
 export const broadcastStep=(start:number,now:number)=>now<start?0:now>=start+RUN_MS?11:1+Math.floor((now-start)/5000);
@@ -64,15 +71,29 @@ export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,no
   }
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const {seed}=await raceSeed(env,mapping.guildId,id);
-  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed,crown?.kind==='vdklastdeath'))).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed,crown?.kind==='vdklastdeath',crown?.kind==='vdkseries'))).run();
  }
  await env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('guild:'+mapping.guildId)).fetch('https://race/ensure',{method:'POST',body:JSON.stringify({guild:mapping.guildId})});
 }
 export class RaceBroadcaster {
  private ctx:DurableObjectState;private env:BroadcastEnv;
- constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;}
+ // Duel channels use a separate DO ID ('duel:<guild>') from the racing alarm
+ // ('guild:<guild>'). Neither alters the other object's storage or schedule.
+ private duelEvents:DuelEventHub;
+ constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;this.duelEvents=new DuelEventHub(ctx.storage);}
  async fetch(request:Request){
-  if(request.method!=='POST'||new URL(request.url).pathname!=='/ensure')return new Response('Not found',{status:404});
+  const path=new URL(request.url).pathname;
+  if(request.method==='POST'&&path==='/duel/subscribe'){
+   const body=await request.text();if(body.length>120)return new Response('Invalid request',{status:400});
+   try{const request=JSON.parse(body) as {user?:unknown;observer?:unknown};return this.duelEvents.subscribe(request.user,request.observer===true);}
+   catch{return new Response('Invalid request',{status:400});}
+  }
+  if(request.method==='POST'&&path==='/duel/notify'){
+   const body=await request.text();if(body.length>300)return new Response('Invalid request',{status:400});
+   try{return Response.json({delivered:this.duelEvents.publish(JSON.parse(body))});}
+   catch{return new Response('Invalid request',{status:400});}
+  }
+  if(request.method!=='POST'||path!=='/ensure')return new Response('Not found',{status:404});
   const {guild}=await request.json() as {guild:string};if(!/^\d{15,22}$/.test(guild))return new Response('Invalid guild',{status:400});
   await this.ctx.storage.put('guild',guild);
   const alarm=await this.ctx.storage.getAlarm();if(!alarm||alarm>Date.now()+1000)await this.ctx.storage.setAlarm(Date.now()+1000);

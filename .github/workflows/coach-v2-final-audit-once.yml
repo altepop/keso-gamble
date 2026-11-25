@@ -1,0 +1,38 @@
+# One-time post-deploy diagnosis of the last KESO COACH historical match.
+# Triggered ONLY by landing this workflow file on main; no schedule or dispatch.
+name: KESO COACH final v2 archive audit (one-off)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/coach-v2-final-audit-once.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Allow the already-scheduled five-minute Cron to run
+        run: sleep 330
+      - name: Read only the allowlisted aggregate audit from existing production D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VALORANT_RESULTS_WORKER: valorant-results
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          umask 077
+          TMPDIR_AUDIT="$(mktemp -d "$RUNNER_TEMP/coach-audit-XXXXXX")"
+          trap 'rm -rf "$TMPDIR_AUDIT"' EXIT
+          cp -R services/valorant-results/. "$TMPDIR_AUDIT/"
+          cd "$TMPDIR_AUDIT"
+          npm ci --ignore-scripts --no-audit --no-fund --silent
+          node scripts/live-settings.mjs
+          node scripts/coach-archive-audit.mjs

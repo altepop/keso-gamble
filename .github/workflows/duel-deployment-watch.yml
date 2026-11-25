@@ -1,0 +1,119 @@
+name: P12 duel deployment health (read-only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/duel-deployment-watch.yml'
+      - 'scripts/duel-deployment-watch.mjs'
+      - 'scripts/duel-deployment-alert.mjs'
+      - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
+      - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/src/duel-rewards.ts'
+      - 'services/valorant-results/test/duel-rewards.test.ts'
+      - 'services/valorant-results/test/duel-rewards-d1.test.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-operations-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'services/valorant-results/src/duel-pve-sessions.ts'
+      - 'services/valorant-results/src/kp.ts'
+      - 'services/valorant-results/test/kp.test.ts'
+      - 'services/valorant-results/src/board-duels.ts'
+      - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
+      - 'services/valorant-results/test/duel-pve-sessions.test.ts'
+      - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-deployment-watch.yml'
+      - 'scripts/duel-deployment-watch.mjs'
+      - 'scripts/duel-deployment-alert.mjs'
+      - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
+      - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/src/duel-rewards.ts'
+      - 'services/valorant-results/test/duel-rewards.test.ts'
+      - 'services/valorant-results/test/duel-rewards-d1.test.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-operations-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'services/valorant-results/src/duel-pve-sessions.ts'
+      - 'services/valorant-results/src/kp.ts'
+      - 'services/valorant-results/test/kp.test.ts'
+      - 'services/valorant-results/src/board-duels.ts'
+      - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
+      - 'services/valorant-results/test/duel-pve-sessions.test.ts'
+      - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
+  workflow_dispatch:
+  schedule:
+    - cron: '43 * * * *'
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: duel-deployment-watch-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  monitor:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate no-write monitor decisions
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs
+      - name: Check recent production deployment statuses without D1 calls
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-report.json
+        run: node scripts/duel-deployment-watch.mjs
+      - name: Create at most one open GitHub Issue for a real deployment anomaly
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-report.json
+        run: node scripts/duel-deployment-alert.mjs
+      # Independent fallback for :17 D1 Insights; the :27/3h heartbeat may itself miss schedule.
+      # Keep this AFTER the deployment incident step so a D1 gap never opens a deployment issue.
+      - name: Independently notify on missing D1 Insights Scheduled executions
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-d1-schedule-watch.mjs
+      # Independent #791 self-watch: :47 daily cron can fail as well as #789 readiness.
+      # This follows deployment issue handling, so a backup alarm is never a deployment incident.
+      - name: Independently detect missing backup watchdog Scheduled
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-backup-watchdog-self-schedule.mjs
+      - name: Independently notify on missing scheduled operations audit
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-operations-cron-watch.mjs
+      - name: Independently notify on missing administrator evidence schedule
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-admin-evidence-cron-watch.mjs

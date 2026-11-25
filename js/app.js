@@ -1,40 +1,43 @@
-import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-332712cc932d20c7';
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-332712cc932d20c7';
-import {steamConnectionMessage} from './steam-view.js?v=web-332712cc932d20c7';
-import {relicsPanel} from './relics-view.js?v=web-332712cc932d20c7';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-332712cc932d20c7';
-import {relicDefaultView} from './relics-v4.js?v=web-332712cc932d20c7';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-332712cc932d20c7';
-import {communityPanel,communityRows} from './community-feed.js?v=web-332712cc932d20c7';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-332712cc932d20c7';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-332712cc932d20c7';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-332712cc932d20c7';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-332712cc932d20c7';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-332712cc932d20c7';
-import { createKpClient } from './kp-client.js?v=web-332712cc932d20c7';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-332712cc932d20c7';
-import { fmt, fmt0 } from './format.js?v=web-332712cc932d20c7';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-332712cc932d20c7';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-332712cc932d20c7';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-332712cc932d20c7';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-332712cc932d20c7';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-332712cc932d20c7';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-332712cc932d20c7';
-import { LUXURY } from './luxury.js?v=web-332712cc932d20c7';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-332712cc932d20c7';
-import { createStore } from './store.js?v=web-332712cc932d20c7';
-import { healthPanel } from './health-view.js?v=web-332712cc932d20c7';
-import { trendPanel } from './trend-view.js?v=web-332712cc932d20c7';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-332712cc932d20c7';
-import {duelScreen} from './duel-view.js?v=web-332712cc932d20c7';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-332712cc932d20c7';
-import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-332712cc932d20c7';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-332712cc932d20c7';
-import { showBigWin } from './bigwin.js?v=web-332712cc932d20c7';
-import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-332712cc932d20c7';
-import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-332712cc932d20c7';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-332712cc932d20c7';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-332712cc932d20c7';
+import {classifyPveConnect4Transition} from './duel-phase11-12-view.js?v=web-ca5d2ee9a5a25ff4';
+import {trioPlayTurn} from './duel-trio.js?v=web-ca5d2ee9a5a25ff4';
+import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-ca5d2ee9a5a25ff4';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-ca5d2ee9a5a25ff4';
+import {VDK_CRASH_START,VDK_IPO_AT,stockIsListed,stockTradeRestriction} from './vdk-bankruptcy.js?v=web-ca5d2ee9a5a25ff4';
+import {steamConnectionMessage} from './steam-view.js?v=web-ca5d2ee9a5a25ff4';
+import {relicsPanel} from './relics-view.js?v=web-ca5d2ee9a5a25ff4';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-ca5d2ee9a5a25ff4';
+import {relicDefaultView} from './relics-v4.js?v=web-ca5d2ee9a5a25ff4';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-ca5d2ee9a5a25ff4';
+import {communityPanel,communityRows} from './community-feed.js?v=web-ca5d2ee9a5a25ff4';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-ca5d2ee9a5a25ff4';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-ca5d2ee9a5a25ff4';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-ca5d2ee9a5a25ff4';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-ca5d2ee9a5a25ff4';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-ca5d2ee9a5a25ff4';
+import { createKpClient } from './kp-client.js?v=web-ca5d2ee9a5a25ff4';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-ca5d2ee9a5a25ff4';
+import { fmt, fmt0 } from './format.js?v=web-ca5d2ee9a5a25ff4';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-ca5d2ee9a5a25ff4';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-ca5d2ee9a5a25ff4';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-ca5d2ee9a5a25ff4';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-ca5d2ee9a5a25ff4';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-ca5d2ee9a5a25ff4';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-ca5d2ee9a5a25ff4';
+import { LUXURY } from './luxury.js?v=web-ca5d2ee9a5a25ff4';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-ca5d2ee9a5a25ff4';
+import { createStore } from './store.js?v=web-ca5d2ee9a5a25ff4';
+import { healthPanel } from './health-view.js?v=web-ca5d2ee9a5a25ff4';
+import { trendPanel } from './trend-view.js?v=web-ca5d2ee9a5a25ff4';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-ca5d2ee9a5a25ff4';
+import {duelScreen} from './duel-view.js?v=web-ca5d2ee9a5a25ff4';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-ca5d2ee9a5a25ff4';
+import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-ca5d2ee9a5a25ff4';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-ca5d2ee9a5a25ff4';
+import { showBigWin } from './bigwin.js?v=web-ca5d2ee9a5a25ff4';
+import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-ca5d2ee9a5a25ff4';
+import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-ca5d2ee9a5a25ff4';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-ca5d2ee9a5a25ff4';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-ca5d2ee9a5a25ff4';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -49,12 +52,131 @@ let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLo
 let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
 const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
 let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
+let duelParticipantPreview=null,duelParticipantPreviewError='';
+let duelSpectatorId='',duelSpectatorSnapshot=null,duelSpectatorVersion=null,duelSpectatorLastRead=0;
+let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',duelSpectatorError='';
+let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
+const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null,open:false,game:'othello',level:'normal',rewardsOpen:false,rewards:null,rewardsError:'',abandonConfirm:'',skillSummary:null,selectedCell:null,pokerPicks:[],animationSlots:[],animationAt:0};
+const duelHistoryUi={open:false,busy:false,data:null,error:'',mode:'all',game:'all'};
+let duelEntryMode='home';
+const duelEntryProgressUi={busy:false,data:null,error:'',delta:null,owner:null,loadedAt:0};
+async function refreshDuelEntryProgress(force=false){
+ if(!live||!wallet.connected||screen!=='duels'||duelEntryProgressUi.busy)return;
+ const owner=state?.selfUserId;
+ if(!owner)return;
+ if(duelEntryProgressUi.owner!==owner){
+  duelEntryProgressUi.owner=owner;duelEntryProgressUi.data=null;
+  duelEntryProgressUi.delta=null;duelEntryProgressUi.loadedAt=0;
+ }
+ if(!force&&duelEntryProgressUi.loadedAt&&Date.now()-duelEntryProgressUi.loadedAt<60000)return;
+ const old=duelEntryProgressUi.data;
+ duelEntryProgressUi.busy=true;duelEntryProgressUi.error='';render();
+ try{
+  const latest=await wallet.duelHistory({mode:'all',game:'all'});
+  if(owner!==state?.selfUserId)return;
+  const total=(data,mode)=>Array.isArray(data?.skills)?data.skills
+   .filter(x=>x.mode===mode).reduce((sum,x)=>sum+Math.max(0,Number(x.points)||0),0):null;
+  if(old)duelEntryProgressUi.delta={
+   pve:total(latest,'pve')-total(old,'pve'),
+   pvp:total(latest,'pvp')-total(old,'pvp')
+  };
+  duelEntryProgressUi.data=latest;duelEntryProgressUi.loadedAt=Date.now();
+ }catch(error){duelEntryProgressUi.error=error.message||'熟練度の取得に失敗しました。';}
+ finally{duelEntryProgressUi.busy=false;if(screen==='duels')render();}
+}
+const duelTrioUi={board:'.........',level:'strong',winner:null,error:''};
+let duelWeeklyEvent=null,duelWeeklyEventChecked=false;
+const duelOperationsUi={available:false,busy:false,report:null,error:'',auto:false,lastAuditAt:0,season:null,archives:null};
+let duelOperationsAccessKnown=false;
+function saveDuelOperationsFile(value,label){
+ // A user-initiated local copy, not a server-side backup or automatic retention.
+ const file=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(file);
+ const anchor=document.createElement('a');anchor.href=url;anchor.download='keso-duel-'+label+'-'+new Date().toISOString().slice(0,10)+'.json';
+ document.body.append(anchor);anchor.click();anchor.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+setInterval(async()=>{
+ if(!duelOperationsUi.auto||!duelOperationsUi.available||duelOperationsUi.busy||
+   !live||!wallet.connected||document.hidden||screen!=='duels'||Date.now()-duelOperationsUi.lastAuditAt<900_000)return;
+ duelOperationsUi.lastAuditAt=Date.now();duelOperationsUi.busy=true;
+ try{duelOperationsUi.report=await wallet.duelOperationsRead();duelOperationsUi.error='';}
+ catch(error){duelOperationsUi.error=error.message||'監査を更新できませんでした。';}
+ finally{duelOperationsUi.busy=false;if(screen==='duels')render();}
+},60_000);
+async function loadDuelWeeklyEvent(){
+ if(duelWeeklyEventChecked||!live||!wallet.connected)return;
+ duelWeeklyEventChecked=true;
+ try{const result=await wallet.duelSeasonEvent();duelWeeklyEvent=result?.event??null;}
+ catch{duelWeeklyEvent=null;duelWeeklyEventChecked=false;}
+ if(screen==='duels')render();
+}
+async function checkDuelOperationsAccess(){
+ if(duelOperationsAccessKnown||!live||!wallet.connected)return;
+ duelOperationsAccessKnown=true;
+ try{duelOperationsUi.available=(await wallet.duelOperationsAccess()).available===true;}
+ catch{duelOperationsUi.available=false;}
+ if(screen==='duels')render();
+}
+
+function announceDuelSpectator(previous,current){
+ if(!duelSpectatorSound||!previous||!current||previous.id!==current.id||
+   !Number.isSafeInteger(previous.version)||current.version<=previous.version)return;
+ const text=current.status==='finished'&&previous.status!=='finished'?'対戦が終了しました':
+  current.status==='active'&&previous.status!=='active'?'対戦が始まりました':
+  current.status==='active'&&current.turn!==previous.turn?'手番が切り替わりました':'盤面が更新されました';
+ try{
+  if(typeof SpeechSynthesisUtterance!=='function'||!window.speechSynthesis)return;
+  const item=new SpeechSynthesisUtterance(text);item.lang='ja-JP';item.rate=1.15;
+  window.speechSynthesis.cancel();window.speechSynthesis.speak(item);
+ }catch{/* Optional device audio never blocks game or authenticated viewing. */}
+}
+async function readDuelSpectator(){
+ if(duelSpectatorBusy||!duelSpectatorId||!live||!wallet.connected||
+   !duelSpectatorWatching||document.hidden||screen!=='duels')return;
+ const id=duelSpectatorId,previous=duelSpectatorSnapshot;
+ duelSpectatorBusy=true;duelSpectatorLastRead=Date.now();
+ try{
+  const result=await wallet.duelSpectate(id,duelSpectatorVersion);
+  if(!live||!duelSpectatorWatching||id!==duelSpectatorId)return;
+  if(result.kind==='snapshot'&&result.snapshot?.id===id){
+   duelSpectatorSnapshot=result.snapshot;duelSpectatorVersion=result.snapshot.version;
+   duelSpectatorError='';duelSpectatorMessage='サーバー確定の観戦情報を表示中';
+   announceDuelSpectator(previous,result.snapshot);
+  }else if(result.kind!=='no_change')throw Error('invalid spectator response');
+ }catch{
+  if(id!==duelSpectatorId)return;
+  duelSpectatorWatching=false;duelSpectatorSnapshot=null;duelSpectatorVersion=null;
+  duelSpectatorError='観戦できません。登録済み本アカウントのKP接続、試合状態を確認してください。';
+ }finally{duelSpectatorBusy=false;if(live&&screen==='duels')render();}
+}
+setInterval(()=>{
+ if(duelSpectatorWatching&&!document.hidden&&
+   (!duelEventsOnline||Date.now()-duelSpectatorLastRead>=15000))
+  void readDuelSpectator();
+},2000);
+let duelEventsAbort=null,duelEventsOnline=false,duelEventsRetryAt=0,duelEventsFailures=0,duelEventsDirty=false;
 function mergeDuelPages(fresh){
  const owner=state.selfUserId;
  if(duelListOwner!==owner){duelData=null;duelListOwner=owner;duelHasMore=!!fresh.hasMore;}
  const byId=new Map((duelData?.matches??[]).map(r=>[r.id,r]));
- for(const match of fresh.matches??[])byId.set(match.id,match);
+ for(const match of fresh.matches??[]){
+  const old=byId.get(match.id);
+  // A slow GET must never roll back a newer confirmed turn or KP result.
+  if(!old||Number(match.version)>=Number(old.version))byId.set(match.id,match);
+ }
  return {...fresh,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+}
+function applyConfirmedDuelMatch(match){
+ // Only the server-confirmed match is displayed before the optional refresh.
+ if(!match||typeof match.id!=='string')return;
+ observeDuelChanges({matches:[match]});
+ const known=new Map((duelData?.matches??[]).map(row=>[row.id,row]));
+ if(Number(known.get(match.id)?.version??-1)>Number(match.version))return;
+ known.set(match.id,match);
+ duelData={...(duelData??{members:[],hasMore:false}),matches:[...known.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+ duelLastGoodFetch=Date.now();
 }
 function duelStorage(){try{return window.sessionStorage??null;}catch{return null;}}
 function saveDuelPending(){
@@ -183,11 +305,11 @@ function arrow(v){return v>0?'↑':v<0?'↓':'→'}
 function moneyCompact(n){return fmt0(Math.floor(n))+' KP'}
 
 function playerRows(){
-  return MARKET.map(s=>{
+  return MARKET.filter(s=>stockIsListed(s.id,Date.now())).map(s=>{
     const price=state.prices[s.id];
     const prev=(state.history[s.id].at(-2)??s.initialPrice);
     const diff=price-prev;const pct=(diff/prev)*100;
-    return {id:s.id,name:s.name,code:s.ticker,value:price,change:diff,pct,time:'更新',country:'',holding:state.holdings[s.id],category:s.category};
+    return {id:s.id,name:s.id==='vdk'&&Date.now()>=VDK_IPO_AT?s.name+'（倒産・上場廃止）':s.name,code:s.ticker,value:price,change:diff,pct,time:'更新',country:'',holding:state.holdings[s.id],category:s.category};
   }).sort((a,b)=>b.value-a.value);
 }
 
@@ -311,13 +433,14 @@ function raceFrame(){
 function ensureRaceLoop(){if(screen==='race'&&!detail&&!raceLoop)raceLoop=requestAnimationFrame(raceFrame);}
 
 function screenMarket(){
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div>${stockPanel(state)}<div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div>${Date.now()>=VDK_IPO_AT?'<div class="market-disclaimer">☠️ VDKブラック商事は1 KPで倒産・上場廃止。🏢 VDKブラックコンサル（VDKC）が500 KPで新規上場した。旧株は新株に変換されない。</div>':Date.now()>=VDK_CRASH_START?'<div class="market-disclaimer">🚨 VDKブラック商事、経営破綻へカウントダウン中。11月21日0時に上場廃止し、VDKブラックコンサルが新規上場予定。旧VDKの新規買付は停止中。</div>':''}${stockPanel(state)}<div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
 }
 
 function tradeEstimate(){
   const qty=Number(drafts['trade-qty'] ?? 1);
   const price=state.prices[activeSymbol];
-  let quote;try{if(live)quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[activeSymbol]??price*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===activeSymbol).initialPrice,side:tradeSide,quantity:qty});}catch(error){return escapeHTML(error.message);}
+  const unavailable=stockTradeRestriction(activeSymbol,tradeSide,Date.now());if(unavailable)return '<p class="helper">'+escapeHTML(unavailable)+'</p>';
+  let quote;try{if(live)quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[activeSymbol]??price*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===activeSymbol).initialPrice,side:tradeSide,quantity:qty,minPrice:activeSymbol==='vdk'?1:20});}catch(error){return escapeHTML(error.message);}
   const gross=quote?.gross??qty*price,fee=quote?.fee??Math.ceil(gross/100);
   if(!Number.isSafeInteger(qty)||qty<1||qty>100000||!Number.isSafeInteger(gross))return '数量は1〜100,000株の整数で入力してください';
   const total=quote?.total??(tradeSide==='buy'?gross+fee:gross-fee);
@@ -330,7 +453,7 @@ function tradeHistory(){
 
 function tradePanel(){
   const s=MARKET.find(v=>v.id===activeSymbol);
-  return `<div class="trade-box"><h3>注文</h3><div class="segment"><button data-trade-side="buy" class="${tradeSide==='buy'?'active':''}">買う</button><button data-trade-side="sell" class="${tradeSide==='sell'?'active':''}">売る</button></div><div class="field"><label for="trade-symbol">銘柄</label><select class="select" id="trade-symbol">${MARKET.map(v=>`<option value="${v.id}" ${v.id===activeSymbol?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="field"><label for="trade-qty">数量（株）</label><input id="trade-qty" class="input" type="number" min="1" max="100000" step="1" value="1"></div><div class="field"><label for="trade-price">現在値</label><input id="trade-price" class="input mono" value="${fmt0(state.prices[s.id])} KP" disabled></div><div class="card-body" id="trade-estimate" aria-live="polite">${tradeEstimate()}</div><div class="action-row"><button class="action-btn primary" data-action="trade">${tradeSide==='buy'?'買付':'売却'}</button></div></div>`;
+  return `<div class="trade-box"><h3>注文</h3><div class="segment"><button data-trade-side="buy" class="${tradeSide==='buy'?'active':''}">買う</button><button data-trade-side="sell" class="${tradeSide==='sell'?'active':''}">売る</button></div><div class="field"><label for="trade-symbol">銘柄</label><select class="select" id="trade-symbol">${MARKET.filter(v=>stockIsListed(v.id,Date.now())).map(v=>`<option value="${v.id}" ${v.id===activeSymbol?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="field"><label for="trade-qty">数量（株）</label><input id="trade-qty" class="input" type="number" min="1" max="100000" step="1" value="1"></div><div class="field"><label for="trade-price">現在値</label><input id="trade-price" class="input mono" value="${fmt0(state.prices[s.id])} KP" disabled></div><div class="card-body" id="trade-estimate" aria-live="polite">${tradeEstimate()}</div><div class="action-row"><button class="action-btn primary" data-action="trade" ${stockTradeRestriction(s.id,tradeSide,Date.now())?'disabled':''}>${tradeSide==='buy'?'買付':'売却'}</button></div></div>`;
 }
 
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
@@ -415,8 +538,13 @@ function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
-lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
- riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,participantPreview:duelParticipantPreview,participantPreviewError:duelParticipantPreviewError,
+  spectatorUi:{matchId:duelSpectatorId||activeDuel?.id||'',
+   watching:duelSpectatorWatching,message:duelSpectatorMessage,error:duelSpectatorError,
+   matches:duelSpectatorMatches,loaded:duelSpectatorLobbyLoaded,loading:duelSpectatorLobbyLoading,
+   sound:duelSpectatorSound,snapshot:duelSpectatorSnapshot},
+ pveUi:{...duelPveUi,animationSlots:Date.now()-duelPveUi.animationAt<1100?duelPveUi.animationSlots:[],historyUi:duelHistoryUi},mode:duelEntryMode,entryProgress:duelEntryProgressUi.data,entryProgressBusy:duelEntryProgressUi.busy,entryProgressError:duelEntryProgressUi.error,entryProgressDelta:duelEntryProgressUi.delta,operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
+ riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',tabs:subTabs(),nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
@@ -604,7 +732,8 @@ async function liveOperation(action,args){
 async function doTrade(){
   const symbol=$('#trade-symbol')?.value || activeSymbol; const qty=Number($('#trade-qty')?.value);
   const side=tradeSide;
-  activeSymbol=symbol; if(live){const quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[symbol]??state.prices[symbol]*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===symbol).initialPrice,side,quantity:qty});try{await liveOperation('trade',{symbol,side,quantity:qty,pricingVersion:STOCK_ORDER_VERSION,limit:quote.total});}catch(error){if(error.message?.includes('株価が変わった')){try{state=await wallet.state();render();}catch{connectionError='株価を更新できません。残高を更新してください。';render();}}throw error;}}else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
+  const restriction=stockTradeRestriction(symbol,side,Date.now());if(restriction)throw Error(restriction);
+  activeSymbol=symbol; if(live){const quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[symbol]??state.prices[symbol]*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===symbol).initialPrice,side,quantity:qty,minPrice:symbol==='vdk'?1:20});try{await liveOperation('trade',{symbol,side,quantity:qty,pricingVersion:STOCK_ORDER_VERSION,limit:quote.total});}catch(error){if(error.message?.includes('株価が変わった')){try{state=await wallet.state();render();}catch{connectionError='株価を更新できません。残高を更新してください。';render();}}throw error;}}else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
 }
 async function doSpin(){
   if(spinLock)return;
@@ -640,7 +769,17 @@ addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-history-mode'){duelHistoryUi.mode=e.target.value;return;}
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-history-game'){duelHistoryUi.game=e.target.value;return;}
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-pve-game'){duelPveUi.game=e.target.value;return;}
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-pve-level'){duelPveUi.level=e.target.value;return;}
+ if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-pve-session-input'){duelPveUi.sessionInput=e.target.value;return;}
  if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-guess'){duelGuessDraft=e.target.value;return;}
+ 
+ if(screen==='duels'&&eventName==='input'&&e.target.id==='duel-spectator-match'){
+   duelSpectatorId=e.target.value;duelSpectatorWatching=false;
+   duelSpectatorSnapshot=null;duelSpectatorVersion=null;return;
+ }
  if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-bid-count'){
   const match=duelData?.matches?.find(x=>x.id===duelActiveId),face=document.getElementById('duel-bid-face');
   if(match?.game==='bluffdice'&&face){
@@ -717,10 +856,305 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
 });
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
+  // Navigating to a second Activity HTML page repeats Discord SDK ready() and can
+  // strand the iPhone iframe. Keep the existing authenticated context alive.
+  if(screen==='duels'&&t.dataset.duelSport!==undefined){
+   e.preventDefault();
+   const game=t.dataset.duelSport;
+   if(!['trio','othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   if(t.dataset.duelSportMode==='pve'&&duelEntryMode==='pve'){
+    duelPveUi.game=game;duelPveUi.open=true;
+   }else if(t.dataset.duelSportMode==='pvp'&&duelEntryMode==='pvp'){
+    duelGame=game;
+   }else return;
+   render();
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPracticeGame!==undefined&&duelEntryMode==='practice'){
+   e.preventDefault();
+   const game=t.dataset.duelPracticeGame;
+   if(!['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   // The free practice runs in its existing isolated demo. It never sends KP or skill writes.
+   const url='./duel-demo.html?cpu=1&game='+encodeURIComponent(game);
+   window.location.href=url;
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelEntry!==undefined){
+   e.preventDefault();
+   if(!['pve','pvp','practice'].includes(t.dataset.duelEntry))return;
+   duelEntryMode=t.dataset.duelEntry;
+   if(duelEntryMode==='pve')duelPveUi.open=true;
+   render();window.scrollTo?.({top:0,behavior:'instant'});return;
+  }
+  if(screen==='duels'&&t.dataset.duelEntryBack!==undefined){
+   e.preventDefault();duelEntryMode='home';render();
+   window.scrollTo?.({top:0,behavior:'instant'});void refreshDuelEntryProgress(true);
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelEntryRefresh!==undefined){
+   e.preventDefault();void refreshDuelEntryProgress(true);return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveLink!==undefined){
+   e.preventDefault();duelPveUi.open=true;render();
+   requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&(t.dataset.duelHistoryOpen!==undefined||t.dataset.duelHistoryRefresh!==undefined)){
+   e.preventDefault();if(!live||!wallet.connected){toast('履歴の閲覧にはKP口座への接続が必要です。');return;}
+   if(duelHistoryUi.busy)return;
+   duelHistoryUi.open=true;duelPveUi.open=true;duelHistoryUi.busy=true;duelHistoryUi.error='';render();
+   try{duelHistoryUi.data=await wallet.duelHistory({mode:duelHistoryUi.mode,game:duelHistoryUi.game});}
+   catch(error){duelHistoryUi.error=error.message||'対局履歴を取得できません。';}
+   finally{duelHistoryUi.busy=false;render();}
+   requestAnimationFrame(()=>document.getElementById('duel-history-panel')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelHistoryResume!==undefined){
+   e.preventDefault();if(!live||!wallet.connected||duelPveUi.busy)return;
+   const id=t.dataset.duelHistoryResume;
+   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))return;
+   duelPveUi.open=true;duelPveUi.busy=true;duelPveUi.error='';render();
+   try{const result=await wallet.duelPveRead(id);duelPveUi.match=result.match;duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;duelPveUi.sessionInput=id;duelPveUi.selectedCell=null;duelPveUi.pokerPicks=[];duelPveUi.animationSlots=[];duelPveUi.message='保存済みCPU戦を再開しました。';}
+   catch(error){duelPveUi.error=error.message||'CPU戦を再開できません。';}
+   finally{duelPveUi.busy=false;render();}
+   requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveAbandonCancel!==undefined){
+   duelPveUi.abandonConfirm='';render();return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveAbandon!==undefined){
+   e.preventDefault();
+   if(!live||!wallet.connected||duelPveUi.busy||duelPveUi.pending)return;
+   const id=t.dataset.duelPveAbandon;
+   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))return;
+   if(t.dataset.duelPveConfirm!=='yes'){
+    duelPveUi.abandonConfirm=id;render();return;
+   }
+   duelPveUi.busy=true;duelPveUi.error='';render();
+   try{
+    const result=await wallet.duelPveAbandon(id);
+    if(duelPveUi.match?.id===id)duelPveUi.match=null;
+    duelPveUi.abandonConfirm='';
+    duelPveUi.message='進行中の対局を無報酬で破棄しました。新しいCPU戦を開始できます。';
+    if(duelHistoryUi.open)duelHistoryUi.data=await wallet.duelHistory({mode:duelHistoryUi.mode,game:duelHistoryUi.game});
+   }catch(error){duelPveUi.error=error.message||'破棄できませんでした。';}
+   finally{duelPveUi.busy=false;render();}
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveRewards!==undefined){
+   e.preventDefault();duelPveUi.open=true;duelPveUi.rewardsOpen=true;duelPveUi.rewardsError='';render();
+   try{duelPveUi.rewards=await wallet.duelRewardProfile();}
+   catch(error){duelPveUi.rewardsError=error.message||'戦績を取得できませんでした。';}
+   render();requestAnimationFrame(()=>document.getElementById('duel-rewards-in-app')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(t.dataset.duelTrioReset||t.dataset.duelTrioCell!==undefined){
+   if(t.dataset.duelTrioReset){
+    duelTrioUi.board='.........';duelTrioUi.winner=null;duelTrioUi.error='';duelWeeklyEvent=null;duelWeeklyEventChecked=false;
+    duelTrioUi.level=document.querySelector('#duel-trio-level')?.value??'strong';
+   }else{
+    const level=document.querySelector('#duel-trio-level')?.value??'strong';
+    try{
+     const result=trioPlayTurn(duelTrioUi.board,Number(t.dataset.duelTrioCell),level);
+     Object.assign(duelTrioUi,{...result,level,error:''});
+    }catch(error){duelTrioUi.error=error.message||'盤面を確認できません。';}
+   }
+   render();return;
+  }
+  // Choice-only gestures never mutate a server match. Gomoku confirms before sending.
+  if(screen==='duels'&&t.dataset.duelPveCancel!==undefined){
+   duelPveUi.selectedCell=null;render();return;
+  }
+  if(screen==='duels'&&t.dataset.duelPvePoker!==undefined){
+   if(duelPveUi.busy||duelPveUi.pending||duelPveUi.match?.turn!=='human')return;
+   const cell=Number(t.dataset.duelPvePoker),picks=duelPveUi.pokerPicks;
+   if(!Number.isInteger(cell)||cell<0||cell>=5)return;
+   if(picks.includes(cell))duelPveUi.pokerPicks=picks.filter(x=>x!==cell);
+   else if(picks.length<3)duelPveUi.pokerPicks=[...picks,cell];
+   else {duelPveUi.error='交換できるカードは３枚までです。';}
+   render();return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveCell!==undefined&&duelPveUi.match?.game==='gomoku'){
+   if(duelPveUi.busy||duelPveUi.pending||duelPveUi.match?.turn!=='human')return;
+   const cell=Number(t.dataset.duelPveCell);
+   if(!Number.isInteger(cell)||cell<0||cell>224)return;
+   duelPveUi.selectedCell=cell;render();return;
+  }
+  if(t.dataset.duelPvePreview||t.dataset.duelPveStart||t.dataset.duelPveCustomStart||t.dataset.duelPveResume||t.dataset.duelPveCell!==undefined||t.dataset.duelPveBoardCol!==undefined||t.dataset.duelPveConfirm!==undefined||t.dataset.duelPveMove||t.dataset.duelPveRetry){
+   if(!live||!wallet.connected||duelPveUi.busy)return;
+   const kind=t.dataset.duelPveRetry?(duelPveUi.pending?.kind??'move'):t.dataset.duelPvePreview?'preview':t.dataset.duelPveStart?'start':t.dataset.duelPveCustomStart?'custom':t.dataset.duelPveResume?'resume':'move';
+   duelPveUi.busy=true;duelPveUi.error='';duelPveUi.message='';
+   try{
+    if(kind==='preview'){
+     const result=await wallet.duelPvePreview();duelPveUi.preview=result.challenge;
+     duelPveUi.message='今日の種目を確認しました。';
+    }else if(kind==='start'||kind==='custom'){
+     const old=duelPveUi.pending?.kind===kind?duelPveUi.pending:null;
+     const id=old?.id??crypto.randomUUID();
+     const args=old?.args??{game:duelPveUi.game,level:duelPveUi.level};
+     duelPveUi.pending={kind,id,...(kind==='custom'?{args}:{})};
+     const result=kind==='custom'?await wallet.duelPveCustomStart({requestId:id,...args}):await wallet.duelPveStart(id);
+     duelPveUi.match=result.match;duelPveUi.sessionInput=result.match.id;
+     duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;
+     duelPveUi.rewardsOpen=false;duelPveUi.rewards=null;duelPveUi.rewardsError='';duelPveUi.skillSummary=null;duelPveUi.selectedCell=null;duelPveUi.pokerPicks=[];duelPveUi.animationSlots=[];
+     duelPveUi.pending=null;duelPveUi.message='サーバーでCPU戦を開始しました。';
+    }else if(kind==='resume'){
+     if(!/^[0-9a-f-]{36}$/i.test(duelPveUi.sessionInput))throw Error('正しい試合IDを入力してください。');
+     const result=await wallet.duelPveRead(duelPveUi.sessionInput);
+     duelPveUi.match=result.match;duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;duelPveUi.pending=null;duelPveUi.selectedCell=null;duelPveUi.pokerPicks=[];duelPveUi.animationSlots=[];duelPveUi.message='保存済みのCPU戦を再開しました。';
+    }else{
+     const match=duelPveUi.match;if(!match?.id||match.turn!=='human')throw Error('CPU戦の状態を再確認してください。');
+     let move=duelPveUi.pending?.kind==='move'&&duelPveUi.pending.session===match.id?duelPveUi.pending.body:null;
+     if(!move){
+      let action={};
+      if(t.dataset.duelPveConfirm!==undefined){
+       const cell=Number(t.dataset.duelPveConfirm);
+       if(match.game!=='gomoku'||cell!==duelPveUi.selectedCell)throw Error('選択した位置を再確認してください。');
+       action={cell};
+      }else if(t.dataset.duelPveBoardCol!==undefined){
+       if(match.game!=='connect4')throw Error('列の操作が不正です。');
+       action={cell:Number(t.dataset.duelPveBoardCol)};
+      }else if(t.dataset.duelPveCell!==undefined)action={cell:Number(t.dataset.duelPveCell)};
+      else if(t.dataset.duelPveMove==='guess'){
+       const guess=document.querySelector('#duel-pve-guess')?.value??'';
+       if(!/^\\d{4}$/.test(guess)||new Set(guess).size!==4)throw Error('異なる数字を４桁入力してください。');
+       action={guess};
+      }else if(t.dataset.duelPveMove==='bid')action={choice:'bid',count:Number(document.querySelector('#duel-pve-count')?.value),face:Number(document.querySelector('#duel-pve-face')?.value)};
+      else if(t.dataset.duelPveMove==='challenge')action={choice:'challenge'};
+      else if(t.dataset.duelPveMove==='poker'){
+       const cells=[...duelPveUi.pokerPicks];
+       if(cells.length>3)throw Error('交換できるカードは３枚までです。');
+       action={cells};
+      }else throw Error('操作を選択してください。');
+      move={action:'move',session:match.id,requestId:crypto.randomUUID(),version:match.version,...action};
+      duelPveUi.pending={kind:'move',session:match.id,body:move};
+     }
+     const result=await wallet.duelPveMove(move);
+     duelPveUi.animationSlots=match.game==='connect4'
+      ?classifyPveConnect4Transition(match.board,result.match.board):[];
+     duelPveUi.animationAt=Date.now();
+     duelPveUi.selectedCell=null;duelPveUi.pokerPicks=[];
+     duelPveUi.match=result.match;duelPveUi.pending=null;
+     duelPveUi.message=result.match.turn==='finished'?'CPU戦が確定しました。次の一局へ進めます。':'サーバー確定の盤面へ更新しました。';
+     if(result.match.turn==='finished'){
+      try{
+       const verified=await wallet.duelHistory({mode:'pve',game:result.match.game});
+       const row=(verified.skills??[]).find(x=>x.mode==='pve'&&x.game===result.match.game);
+       const previous=(duelEntryProgressUi.data?.skills??[]).find(x=>x.mode==='pve'&&x.game===result.match.game);
+       duelPveUi.skillSummary=row?{points:row.points,delta:previous?Number(row.points)-Number(previous.points):null}:null;
+       duelHistoryUi.data=verified;
+      }catch{duelPveUi.skillSummary=null;}
+      try{duelPveUi.rewards=await wallet.duelRewardProfile();duelPveUi.rewardsOpen=true;}
+      catch(error){duelPveUi.rewardsError=error.message||'報酬の結果を取得できません。';}
+     }
+      if(result.match.turn==='finished')void refreshDuelEntryProgress(true);
+    }
+   }catch(error){
+    duelPveUi.error=error.message||'CPU戦を確認できません。';
+    // A definitive HTTP validation failure is not an ambiguous sent operation.
+    if(error.status)duelPveUi.pending=null;
+   }finally{duelPveUi.busy=false;render();}
+   return;
+  }
+  if(t.dataset.duelOperationsRead||t.dataset.duelOperationsExport||t.dataset.duelOperationsRecords||t.dataset.duelOperationsAuto||t.dataset.duelSeasonRead||t.dataset.duelSeasonArchive){
+   if(!duelOperationsUi.available||duelOperationsUi.busy)return;
+   if(t.dataset.duelOperationsAuto){duelOperationsUi.auto=!duelOperationsUi.auto;duelOperationsUi.lastAuditAt=Date.now();render();return;}
+   if(t.dataset.duelSeasonArchive){
+    duelOperationsUi.busy=true;duelOperationsUi.error='';render();
+    try{duelOperationsUi.archives=await wallet.duelSeasonArchive();}
+    catch(error){duelOperationsUi.error=error.message||'確定済みシーズンの履歴を取得できません。';}
+    finally{duelOperationsUi.busy=false;render();}
+    return;
+   }
+   if(t.dataset.duelSeasonRead){duelOperationsUi.busy=true;duelOperationsUi.error='';render();try{duelOperationsUi.season=await wallet.duelSeasonRead();}catch(error){duelOperationsUi.error=error.message||'シーズン順位を取得できません。';}finally{duelOperationsUi.busy=false;render();}return;}
+   if(t.dataset.duelOperationsExport){
+    if(duelOperationsUi.report)saveDuelOperationsFile(duelOperationsUi.report,'audit');
+    return;
+   }
+   duelOperationsUi.busy=true;duelOperationsUi.error='';duelOperationsUi.lastAuditAt=Date.now();render();
+   try{
+    if(t.dataset.duelOperationsRecords)saveDuelOperationsFile(await wallet.duelOperationsExport(),'records-latest');
+    else duelOperationsUi.report=await wallet.duelOperationsRead();
+   }catch(error){duelOperationsUi.error=error.message||'監査情報を取得できません。';}
+   finally{duelOperationsUi.busy=false;render();}
+   return;
+  }
+  if(t.dataset.duelSpectatorLobby){
+    if(!live||!wallet.connected||duelSpectatorLobbyLoading)return;
+    duelSpectatorLobbyLoading=true;duelSpectatorError='';render();
+    try{
+     const result=await wallet.duelSpectatorLobby();
+     duelSpectatorMatches=Array.isArray(result?.matches)?result.matches:[];
+     duelSpectatorLobbyLoaded=true;duelSpectatorMessage='観戦可能な試合を確認しました。';
+    }catch{
+     duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;
+     duelSpectatorError='観戦一覧を取得できません。本アカウントの登録状態を確認してください。';
+    }finally{duelSpectatorLobbyLoading=false;render();}
+    return;
+   }
+   if(t.dataset.duelSpectatorSelect){
+    duelSpectatorId=t.dataset.duelSpectatorSelect;
+    duelSpectatorWatching=true;duelSpectatorVersion=null;duelSpectatorSnapshot=null;
+    duelSpectatorError='';duelSpectatorMessage='試合情報を確認中';render();
+    await readDuelSpectator();return;
+   }
+   if(t.dataset.duelSpectatorSound){
+    duelSpectatorSound=!duelSpectatorSound;
+    if(!duelSpectatorSound)try{window.speechSynthesis?.cancel();}catch{}
+    else try{
+      if(typeof SpeechSynthesisUtterance==='function'&&window.speechSynthesis){
+       const prompt=new SpeechSynthesisUtterance('観戦の読み上げを有効にしました');
+       prompt.lang='ja-JP';window.speechSynthesis.speak(prompt);
+      }
+    }catch{}
+    render();return;
+   }
+   if(t.dataset.duelSpectatorStop){
+    duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;
+    duelSpectatorSnapshot=null;duelSpectatorMessage='観戦を終了しました。';duelSpectatorError='';
+    render();return;
+   }
+   if(t.dataset.duelSpectatorWatch){
+    if(!live||!wallet.connected)return;
+    duelSpectatorId=duelSpectatorId||(duelData?.matches?.find(m=>m.id===duelActiveId)?.id??'');
+    duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorWatching=true;
+    duelSpectatorMessage='登録本アカウントとサーバー状態を確認しています';duelSpectatorError='';
+    render();await readDuelSpectator();return;
+   }
+   if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
   if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelRiskConfirm=null;duelOpponentPickerOpen=false;render();return;}
-  if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
+  if(t.dataset.duelRematch){
+   if(duelBusy||duelPendingAction){toast('未確認の操作を確認してから再戦してください。');return;}
+   const old=duelData?.matches?.find(row=>row.id===t.dataset.duelRematch);
+   if(!old||old.status!=='finished'||(old.user_a!==state.selfUserId&&old.user_b!==state.selfUserId))return;
+   const opponent=old.user_a===state.selfUserId?old.user_b:old.user_a;
+   if(!(duelData?.members??state.members??[]).some(member=>member.id===opponent)){
+    toast('対戦相手を確認できません。更新後に相手を選んでください。');return;
+   }
+   duelGame=old.game;duelStake=old.stake;duelTarget=opponent;duelRiskConfirm=null;duelOpponentPickerOpen=false;
+   render();
+   document.getElementById('duel-game')?.scrollIntoView({block:'center',behavior:'smooth'});
+   document.getElementById('duel-game')?.focus({preventScroll:true});
+   toast('同じ条件を入力した。金額を確認し、申し込みボタンを押してください。');return;
+  }
+  if(t.dataset.duelSelect){duelParticipantPreview=null;duelParticipantPreviewError='';duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
+  if(t.dataset.duelPreview){
+    if(!live||!wallet.connected||duelBusy)return;
+    const match=duelData?.matches?.find(row=>row.id===duelActiveId);
+    if(!match)return;
+    duelParticipantPreviewError='';
+    try{
+      const result=await wallet.duelParticipantPreview(match.id);
+      if(result.kind==='snapshot'&&result.snapshot?.id===match.id)duelParticipantPreview=result.snapshot;
+      else if(result.kind!=='no_change')throw Error('公開情報を確認できません。');
+    }catch{
+      duelParticipantPreview=null;
+      duelParticipantPreviewError='参加者向けの公開情報を取得できませんでした。';
+    }
+    render();return;
+  }
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
    if(t.dataset.duelHistoryMore){
     if(duelLoading||duelBusy||!live||document.hidden||!duelHasMore)return;
@@ -785,10 +1219,11 @@ addEventListener('click',async e=>{
      duelError='前回の操作結果が未確認のため、新しい操作を送れません。「前回の操作を確認」を押してください。';render();return;
     }
     if(!duelPendingAction){duelPendingAction={id:crypto.randomUUID(),args,owner:state.selfUserId,at:Date.now()};saveDuelPending();}
-   duelBusy=true;duelError='';render();
+   duelBusy=true;const hadDuelError=!!duelError;duelError='';if(hadDuelError)render();else paintDuelBusy();
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
     duelPendingAction=null;saveDuelPending();duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
+    applyConfirmedDuelMatch(result.match);render();
     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
@@ -806,7 +1241,7 @@ addEventListener('click',async e=>{
   if(t.matches('[data-bet],[data-race-horse],[data-race-type],[data-race-amount],[data-casino-game],[data-mines-count],[data-number]'))playSfx('tick');
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['hoyo-status','hoyo-link','hoyo-refresh','hoyo-unlink','relic-market-list','relic-market-cancel','relic-market-buy-confirm','steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-voucher-buy'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['hoyo-status','hoyo-link','hoyo-refresh','hoyo-unlink','relic-market-list','relic-market-cancel','relic-market-buy-confirm','steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','directive-transfer','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-consumable-use','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-voucher-buy'].includes(t.dataset.action);
   if(mutates && mutationPending){
     if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
     return;
@@ -820,7 +1255,7 @@ addEventListener('click',async e=>{
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
     if(t.dataset.action==='relic-tab'){
-      if(!['collection','gear','summon','records','exchange','market'].includes(t.dataset.tab))return;
+      if(!['collection','gear','summon','consumables','records','exchange','market'].includes(t.dataset.tab))return;
       relicView={...relicView,section:t.dataset.tab};
       render();
       document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
@@ -901,6 +1336,7 @@ addEventListener('click',async e=>{
       const presetSelected=$('#relic-preset')?.value??'';
       const presetName=$('#relic-preset-name')?.value??'';
       const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
+       action==='relic-consumable-use'?{consumable:t.dataset.consumable??'',relic:[...document.querySelectorAll('[data-consumable-target]')].find(e=>e.dataset.consumableTarget===t.dataset.consumable)?.value??''}:
        action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number((relicView.section==='collection'?$('#relic-slot-gallery')?.value:$('#relic-slot')?.value)??0)}:
        action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
        action==='relic-recycle'?{relic:$('#relic-recycle-id')?.value??'',count:Number($('#relic-recycle-count')?.value??1)}:
@@ -914,12 +1350,12 @@ addEventListener('click',async e=>{
        ['relic-load-preset','relic-remove-preset'].includes(action)?{preset:presetSelected}:
        action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
       const result=await liveOperation(action,args);
-      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-market-list','relic-market-buy','relic-market-cancel'].includes(action)){
+      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-consumable-use','relic-market-list','relic-market-buy','relic-market-cancel'].includes(action)){
        try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
       }
       if(action==='relic-summon')relicReveal=result;
       if(action.startsWith('relic-market-'))relicView.marketConfirmation=null;
-      relicNotice=action==='relic-market-list'?'「'+result.name+'」を闇市に出品した。':action==='relic-market-buy'?'「'+result.name+'」を'+result.paid.toLocaleString('ja-JP')+'KPで購入した。':action==='relic-market-cancel'?'「'+result.name+'」の出品を取り下げた。':action==='relic-recycle'?result.recycled+'個を欠片にして、'+result.gained+'欠片獲得した。':action==='relic-shop'?result.item.name+'を'+result.cost+'欠片で交換した。':action==='relic-voucher'?'My馬引換券を交換した。所持'+result.horseVouchers+'枚。':action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      relicNotice=action==='relic-consumable-use'?result.name+' を使用：'+result.effect+'。残り'+result.remaining+'個。':action==='relic-market-list'?'「'+result.name+'」を闇市に出品した。':action==='relic-market-buy'?'「'+result.name+'」を'+result.paid.toLocaleString('ja-JP')+'KPで購入した。':action==='relic-market-cancel'?'「'+result.name+'」の出品を取り下げた。':action==='relic-recycle'?result.recycled+'個を欠片にして、'+result.gained+'欠片獲得した。':action==='relic-shop'?result.item.name+'を'+result.cost+'欠片で交換した。':action==='relic-voucher'?'My馬引換券を交換した。所持'+result.horseVouchers+'枚。':action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}${result.consumables?.length?'／消耗品 '+result.consumables.map(v=>v.name+'×'+v.count).join('、'):''}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
       render();
       if(action==='relic-summon')playRelicSound(relicReveal);
       toast(relicNotice);return;
@@ -1048,9 +1484,9 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelOpponentPickerOpen=false;duelGomokuPreview=null;render();return;}
+    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelEntryMode='home';duelEntryProgressUi.data=null;duelEntryProgressUi.delta=null;duelEntryProgressUi.owner=null;duelEntryProgressUi.loadedAt=0;duelEntryProgressUi.error='';duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;duelOpponentPickerOpen=false;duelGomokuPreview=null;duelTrioUi.board='.........';duelTrioUi.winner=null;duelTrioUi.error='';duelPveUi.match=null;duelPveUi.preview=null;duelPveUi.pending=null;duelPveUi.sessionInput='';duelPveUi.open=false;duelPveUi.rewardsOpen=false;duelPveUi.rewards=null;duelPveUi.rewardsError='';duelOperationsUi.available=false;duelOperationsUi.report=null;duelOperationsUi.season=null;duelOperationsUi.archives=null;duelOperationsUi.auto=false;duelOperationsUi.lastAuditAt=0;duelOperationsAccessKnown=false;render();return;}
     if(t.dataset.casinoGame){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='duels')await refreshDuel(true);else duelOpponentPickerOpen=false;if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;if(screen==='duels')duelEntryMode='home';render();if(screen==='duels'){void refreshDuelEntryProgress();await refreshDuel(true);void checkDuelOperationsAccess();void loadDuelWeeklyEvent();}else duelOpponentPickerOpen=false;if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='slot-close-reveal'){
       stopTempleReplay();slotReveal=null;casinoPresentation=null;render();
       relicRewardGate.finish();if(slotPendingToast){toast(slotPendingToast);slotPendingToast='';}
@@ -1143,6 +1579,12 @@ addEventListener('click',async e=>{
       await commit(next=>submitClaim(next,data));delete drafts['claim-reference'];render();toast('確認待ちに追加しました。まだKPは支給されません');return;
     }
     if(t.dataset.approve){const reward=await commit(next=>approveClaim(next,Number(t.dataset.approve)));render();toast(`デモ確認：+${moneyCompact(reward)}`);return;}
+    if(t.dataset.action==='directive-transfer'){
+      if(!live)throw Error('本番KP口座を接続してください。');
+      const target=t.closest('article')?.querySelector('[data-directive-transfer-target]')?.value;
+      if(!target)throw Error('乗り換え先を選んでください。');
+      await liveOperation('directive-transfer',{directiveId:t.dataset.directiveId,target});render();toast('追加KPなしで指令の相手を変更しました');return;
+    }
     if(t.dataset.action==='issue-directive'){
       const data={target:$('#directive-target').value,task:$('#directive-task').value,game:$('#directive-game')?.value,achievement:$('#directive-achievement')?.value};
       if(live)await liveOperation('directive',data);else await commit(next=>issueDirective(next,data));render();toast(live?'指名しました。Discordにも順次お知らせします':'デモ指令を発行しました（外部送信なし）');return;
@@ -1292,32 +1734,99 @@ async function refreshMarket() {
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
 }
+function paintDuelSync(){
+ const label=app.querySelector('.duel-sync')?.firstChild;
+ if(label?.nodeType===3){
+  label.textContent='対戦情報：'+(duelLastGoodFetch?'最終更新 '+new Date(duelLastGoodFetch).toLocaleTimeString('ja-JP'):'確認中')+(duelLoading?'・更新中':'')+'。';
+ }
+}
+function paintDuelBusy(){
+ const current=app.querySelector('.duel-current');
+ if(current){
+  current.setAttribute('aria-busy','true');
+  current.querySelectorAll('button[data-duel-act],button[data-duel-cell],button[data-duel-confirm-cell],button[data-duel-mini]').forEach(button=>{button.disabled=true;});
+ }
+ app.querySelectorAll('.duel-new button[data-duel-act]').forEach(button=>{button.disabled=true;});
+}
+function stopDuelEvents(){
+ if(duelEventsAbort){duelEventsAbort.abort();duelEventsAbort=null;}
+ duelEventsOnline=false;
+}
+function startDuelEvents(){
+ if(duelEventsAbort||!live||!wallet.connected||screen!=='duels'||document.hidden||
+    Date.now()<duelEventsRetryAt)return;
+ const ctl=new AbortController();duelEventsAbort=ctl;
+ wallet.duelEvents({
+  signal:ctl.signal,
+  onOpen:()=>{if(duelEventsAbort!==ctl)return;duelEventsFailures=0;},
+  onHint:hint=>{
+   if(duelEventsAbort!==ctl||screen!=='duels'||document.hidden)return;
+   // A Discord proxy may accept the SSE headers but buffer every frame.
+   // Only receiving a valid actual event justifies a longer D1 cadence.
+   duelEventsOnline=true;
+   if(duelSpectatorWatching&&hint.id===duelSpectatorId&&
+      (duelSpectatorVersion===null||hint.version>duelSpectatorVersion))
+     void readDuelSpectator();
+   const known=duelData?.matches?.find(match=>match.id===hint.id);
+   if(known&&Number(known.version)>=hint.version)return;
+   // D1 remains authoritative. The hint only prompts a read, never a local
+   // board mutation or a guessed wallet balance.
+   duelEventsDirty=true;
+   if(!duelBusy&&!duelLoading){duelEventsDirty=false;refreshDuel(true);}
+  }
+ }).catch(error=>{
+  if(ctl.signal.aborted)return;
+  // Proxy/SSE unavailability is normal on some Discord clients.
+  // Keep the original 10-second active-room D1 polling as a safe fallback.
+  if(duelEventsFailures===0)console.info('Duel event stream unavailable; using polling',error?.message??'');
+ }).finally(()=>{
+  if(duelEventsAbort!==ctl)return;
+  duelEventsAbort=null;duelEventsOnline=false;
+  if(!ctl.signal.aborted){
+   duelEventsFailures=Math.min(5,duelEventsFailures+1);
+   duelEventsRetryAt=Date.now()+Math.min(60000,2500*2**(duelEventsFailures-1));
+  }
+ });
+}
 async function refreshDuel(force=false){
  if(screen!=='duels'||!live||document.hidden||duelBusy||duelLoading||!wallet.connected)return;
+ startDuelEvents();
  loadDuelHistory();loadDuelPending();
  const now=Date.now();if(!force&&now<duelRetryNotBefore)return;const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
  const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
- // Preserve 10-second updates during play but reduce idle reads: 20s for invites, 30s otherwise.
- const cadence=active?10000:pending?20000:30000;
+ // Event notifications eliminate frequent D1 polling while a stream is live.
+ // Still check periodically to recover missed notifications, cron timeouts,
+ // Discord command actions and stalled proxy streams.
+ const cadence=duelEventsOnline?(active?30000:pending?45000:60000):(active?10000:pending?20000:30000);
  if(!force&&now-duelLastFetch<cadence)return;
- duelLastFetch=now;duelLoading=true;render();
+ duelLastFetch=now;duelLoading=true;paintDuelSync();
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
-  observeDuelChanges(fresh);duelData=mergeDuelPages(fresh);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
+  const previous=JSON.stringify(duelData),hadError=!!duelError;
+  const safe={...fresh,matches:(fresh.matches??[]).filter(match=>{
+   const known=duelData?.matches?.find(row=>row.id===match.id);
+   return !known||Number(match.version)>=Number(known.version);
+  })};
+  observeDuelChanges(safe);duelData=mergeDuelPages(safe);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
-  render();
-  }catch(error){
+  if(previous!==JSON.stringify(duelData)||hadError)render();
+ }catch(error){
   duelRefreshFailures=Math.min(4,duelRefreshFailures+1);
   duelRetryNotBefore=Date.now()+Math.min(60000,10000*2**(duelRefreshFailures-1));
   duelError='対戦情報を取得できませんでした。最後に受信した盤面を表示しています。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');
   render();
- }
- finally{duelLoading=false;render();}
+ }finally{duelLoading=false;paintDuelSync();}
 }
-setInterval(()=>{if(screen==='duels')refreshDuel();},10000);
+setInterval(()=>{
+ if(screen==='duels'&&live&&!document.hidden&&wallet.connected){
+  startDuelEvents();
+  if(duelEventsDirty&&!duelBusy&&!duelLoading){duelEventsDirty=false;refreshDuel(true);}
+  else refreshDuel();
+ }else stopDuelEvents();
+},2000);
 // Countdown updates are purely in-browser and do not query D1.
 setInterval(()=>{
  if(screen!=='duels'||document.hidden)return;
@@ -1328,7 +1837,10 @@ setInterval(()=>{
 },1000);
 // When an Activity resumes after being backgrounded, refresh once if its data is stale.
 // The existing 10-second poll remains the maximum active cadence.
-addEventListener('visibilitychange',()=>{if(!document.hidden&&screen==='duels'&&Date.now()-duelLastFetch>=6000)refreshDuel(true);});
+addEventListener('visibilitychange',()=>{
+ if(document.hidden){stopDuelEvents();return;}
+ if(screen==='duels'){startDuelEvents();if(Date.now()-duelLastFetch>=6000)refreshDuel(true);}
+});
 addEventListener('storage', e => {
   if(!live&&(e.key === null || [KEY,LEGACY_KEY].includes(e.key))) {
     store.refresh();

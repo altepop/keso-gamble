@@ -1,8 +1,8 @@
-import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-332712cc932d20c7';
-import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-332712cc932d20c7';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-332712cc932d20c7';
-import {relicExchangeSection} from './relic-exchange-view.js?v=web-332712cc932d20c7';
-import {relicMarketSection} from './relic-market-view.js?v=web-332712cc932d20c7';
+import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-ca5d2ee9a5a25ff4';
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-ca5d2ee9a5a25ff4';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-ca5d2ee9a5a25ff4';
+import {relicExchangeSection} from './relic-exchange-view.js?v=web-ca5d2ee9a5a25ff4';
+import {relicMarketSection} from './relic-market-view.js?v=web-ca5d2ee9a5a25ff4';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -71,10 +71,26 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
  const pagesHtml=relicInventoryPages(inv);
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
+ const consumableCatalog=Array.isArray(proofs?.consumableCatalog)?proofs.consumableCatalog:[];
+ const consumableCards=consumableCatalog.map(def=>{
+  const owned=Number(collection.consumables?.[def.id]??0);
+  const targets=items.filter(item=>{
+   const original=source.get(item.id);
+   if(!original||item.origin!=='normal'||item.rarity!==original.rarity||item.foil||item.mutation)return false;
+   if(def.id==='consumable.foil_seal')return item.rarity!=='transcendent'&&!original.special;
+   return Number(item.count)>=2;
+  });
+  const options=targets.map(item=>'<option value="'+esc(item.id)+'">'+esc(item.name)+'（'+yen(item.count)+'個）</option>').join('');
+  return '<article class="panel"><div class="card-body"><h3 class="panel-title">🧪 '+esc(def.name)+'　×'+yen(owned)+'</h3>'+
+   '<p class="helper">'+esc(def.description)+'</p>'+
+   '<p class="helper">通常召喚の追加抽選：'+(Number(def.ratePerMillion)/10000)+'%／回。通常遺物の排出率は変わらない。</p>'+
+   '<label>使用対象<select class="select" data-consumable-target="'+esc(def.id)+'">'+(options||'<option value="">対象となる所持遺物がない</option>')+'</select></label>'+
+   '<button type="button" class="action-btn primary" data-action="relic-consumable-use" data-consumable="'+esc(def.id)+'" '+(!state.serverWallet||owned<1||!targets.length?'disabled':'')+'>この消耗品を使う</button></div></article>';
+ }).join('');
  const buildTools=relicPresetsSection(collection,proofs)+relicBuildSection(proofs);
  const advanced=relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
- const section=['collection','gear','summon','records','exchange','market'].includes(view.section)?view.section:'collection';
- const tabs=[['collection','🎒 図鑑・装備'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['market','🌑 闇市'],['records','📊 記録・限定']];
+ const section=['collection','gear','summon','consumables','records','exchange','market'].includes(view.section)?view.section:'collection';
+ const tabs=[['collection','🎒 図鑑・装備'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['consumables','🧪 消耗品'],['exchange','🧩 欠片・交換所'],['market','🌑 闇市'],['records','📊 記録・限定']];
  const nav='<nav class="relic-v8-nav" aria-label="遺物画面の切替">'+tabs.map(([id,label])=>
   '<button type="button" class="relic-v8-tab'+(section===id?' active':'')+'" data-action="relic-tab" data-tab="'+id+'" aria-current="'+(section===id?'page':'false')+'">'+label+'</button>').join('')+'</nav>';
  const pane=(id)=>'<div class="relic-v8-pane'+(section===id?' active':'')+'" data-pane="'+id+'">';
@@ -133,6 +149,12 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <div class="${view.layout==='list'?'relic-v8-list':'relic-v8-grid'}">${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}</div>
    ${pagesHtml}
  </div></section>
+ </div>
+ ${pane('consumables')}
+ <section class="panel"><div class="card-body"><h2 class="panel-title">🧪 消耗品遺物・専用保管庫</h2>
+ <p class="helper">消耗品は装備4枠を使わない。使用すると1個減り、その効果はサーバーで確定する。通常召喚の遺物は必ず従来どおり獲得でき、消耗品は低確率の追加ドロップだ。</p>
+ ${consumableCatalog.length?'':'<p class="helper">消耗品情報を読み込み中。</p>'}</div></section>
+ ${consumableCards}
  </div>
  ${pane('exchange')}
  ${relicExchangeSection(collection,proofs,Boolean(state.serverWallet),view)}

@@ -1,0 +1,33 @@
+name: Recover one stalled coaching CI check
+on:
+  pull_request:
+    paths: ['scripts/recover-stalled-coach-ci*', '.github/workflows/recover-stalled-coach-ci-once.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/recover-stalled-coach-ci*', '.github/workflows/recover-stalled-coach-ci-once.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - run: node --test scripts/recover-stalled-coach-ci.test.mjs
+  recover:
+    needs: test
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Cancel only run 44228187908 if its tool setup is still stalled before deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/recover-stalled-coach-ci.mjs
