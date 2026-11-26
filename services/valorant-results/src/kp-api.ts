@@ -131,6 +131,17 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare(`SELECT d.id,d.issuer,d.target,d.task,d.game,d.achievement,d.cost,d.status,d.at AS time,t.at AS transferredAt,COALESCE(l1.delta,0)+COALESCE(l2.delta,0) AS refunded,COALESCE(b.delta,0) AS earlyBonus FROM kp_directives d LEFT JOIN kp_directive_transfers t ON t.directive_id=d.id LEFT JOIN kp_ledger l1 ON l1.id='directive-refund-1:'||d.id LEFT JOIN kp_ledger l2 ON l2.id='directive-refund-2:'||d.id LEFT JOIN kp_ledger b ON b.id='directive-early:'||d.id WHERE d.guild=? AND (d.issuer=? OR d.target=?) ORDER BY d.at DESC,d.id LIMIT 100`).bind(mapping.guildId,user,user).all()).results;
+ // Migrate today's pre-change per-category counter using the directive rows already
+ // fetched for the screen. No extra D1 read in the usual path. Incomplete legacy
+ // evidence keeps the old upper bound rather than accidentally granting extra quota.
+ const oldExchange=state.exchange,exchangeNow=Date.now();
+ if(oldExchange?.day===exchangeDay(exchangeNow)&&!Number.isSafeInteger(oldExchange.competitiveCount)&&oldExchange.byCategory){
+  const expected=oldExchange.byCategory.directive;
+  if(Number.isSafeInteger(expected)&&expected>=0&&expected<=3){
+   const issued=state.directives.filter((d:{issuer:string;time:number;task:string})=>d.issuer===user&&exchangeDay(d.time)===oldExchange.day);
+   if(issued.length===expected)oldExchange.competitiveCount=issued.filter((d:{task:string})=>d.task==='competitive').length;
+  }
+ }
  state.members=members;
  state.escalationRating=await escalationRatingView(env,mapping.guildId,user);
  state.escalationSpins=(await env.DB.prepare("SELECT s.id,s.kind,s.tier,s.award,s.balance_before AS beforeBalance,s.balance_after AS afterBalance,s.at,COALESCE(e.mode,'escalation') AS mode FROM kp_escalation_spins s LEFT JOIN kp_events e ON e.id=s.id WHERE s.guild=? AND s.user=? ORDER BY s.at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
@@ -235,7 +246,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
-   useExchange(state,Date.now(),'directive');
+   useExchange(state,Date.now(),'directive',task);
    const game=task==='steam'?String(args.game??'').trim():'',achievement=task==='steam'?String(args.achievement??'').trim():'';
    if(task==='steam'&&(!game||!achievement||game.length>80||achievement.length>120))throw Error('ゲームと実績を入力してください。');
    directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true,discount};

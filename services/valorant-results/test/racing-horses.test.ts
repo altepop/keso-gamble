@@ -57,7 +57,7 @@ test('a box costs its price, makes a named horse of a drawn grade, and counts as
  assert.equal(balance(f.sql,two),0);
 });
 
-test('three independent daily limits, old receipts, midnight reset and stable capacity', async t => {
+test('only ordinary competitive has a daily limit; unlimited other purchases, legacy receipts, midnight reset and stable capacity', async t => {
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
  for(const n of [1,2])await operateKp(f.env,mapping,one,`horse-buy-op-1000${n}`,'horse-buy',{box:'normal',name:'ウマ'+n});
@@ -65,6 +65,7 @@ test('three independent daily limits, old receipts, midnight reset and stable ca
  // Simulate a pre-release wallet with two horse purchases and one directive.
  const legacy=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
  delete legacy.exchange.byCategory;
+ delete legacy.exchange.competitiveCount;
  f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(legacy),guild,one);
  assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:1,horse:2,luxury:0});
  const third=await operateKp(f.env,mapping,one,'horse-buy-op-10003','horse-buy',{box:'normal',name:'ウマ3'});
@@ -77,10 +78,19 @@ test('three independent daily limits, old receipts, midnight reset and stable ca
  for(let n=1;n<=3;n++)await operateKp(f.env,mapping,one,'luxury-op-000000'+n,'luxury',{item:'title',title:'KP長者'});
  assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:3,horse:3,luxury:3});
  const before=balance(f.sql);
- await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10004','horse-buy',{box:'normal',name:'ウマ4'}),/1日3回/);
+ await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10004','horse-buy',{box:'normal',name:'ウマ4'}),/3頭まで/);
  await assert.rejects(operateKp(f.env,mapping,one,'directive-op-000004','directive',{target:two,task:'competitive'}),/1日3回/);
- await assert.rejects(operateKp(f.env,mapping,one,'luxury-op-0000004','luxury',{item:'title',title:'KP長者'}),/1日3回/);
  assert.equal(balance(f.sql),before);
+ await operateKp(f.env,mapping,one,'luxury-op-0000004','luxury',{item:'title',title:'KP長者'});
+ await operateKp(f.env,mapping,one,'horse-sell-op-10004','horse-sell',{horseId:third.result.horse.id});
+ await operateKp(f.env,mapping,one,'horse-buy-op-10006','horse-buy',{box:'normal',name:'ウマ4'});
+ for(const [i,task] of ['unrated','solo_competitive','solo_death_unrated','unrated'].entries()){
+  f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+  await operateKp(f.env,mapping,one,'directive-unlimited-'+i,'directive',{target:two,task});
+ }
+ assert.equal((await readKpState(f.env,mapping,one)).exchange.competitiveCount,3);
+ assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:7,horse:4,luxury:4});
+ f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
  t.mock.timers.setTime(Date.parse('2026-10-28T00:00:00+09:00'));
  await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10005','horse-buy',{box:'normal',name:'ウマ4'}),/3頭まで/);
  await operateKp(f.env,mapping,one,'directive-op-000005','directive',{target:two,task:'competitive'});
@@ -420,4 +430,23 @@ test('Fujimura late namesake races award zero owner KP including consolation, wi
  assert.equal(balance(f.sql,two),0,'retry must not credit namesake');
  const bet=f.sql.prepare("SELECT json_extract(value,'$.status') AS status FROM kp_state s,json_each(s.data,'$.raceBets') WHERE s.user=? AND json_extract(value,'$.raceId')=?").get(one,race);
  assert.ok(bet,'unrelated player bets remain stored');
+});
+
+test('mixed pre-change directive receipts migrate to ordinary competitive count only',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ for(const [i,task] of ['unrated','solo_competitive','competitive'].entries()){
+  f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+  await operateKp(f.env,mapping,one,'directive-mixed-old-'+i,'directive',{target:two,task});
+ }
+ const legacy=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ delete legacy.exchange.competitiveCount;
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(legacy),guild,one);
+ assert.equal((await readKpState(f.env,mapping,one)).exchange.competitiveCount,1);
+ for(let i=0;i<2;i++){
+  f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+  await operateKp(f.env,mapping,one,'directive-mixed-new-'+i,'directive',{target:two,task:'competitive'});
+ }
+ f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+ await assert.rejects(operateKp(f.env,mapping,one,'directive-mixed-new-3','directive',{target:two,task:'competitive'}),/1日3回/);
 });
