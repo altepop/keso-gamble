@@ -433,7 +433,9 @@ export async function preloadKpRunMatches(env:KpEnv,run:KpRun,ids:readonly strin
   const chunk=pending.slice(offset,offset+50);
   const sql=KP_RUN_MATCH_SQL.replace('SELECT e.amount+','SELECT e.id AS event_id,e.amount+')
    .replace('WHERE e.id=? AND e.guild=? LIMIT 1',
-    `WHERE e.id IN (${chunk.map(()=>'?').join(',')}) AND e.guild=?`);
+    // Keep the exact TEXT guild comparison, but prevent SQLite from choosing a
+     // guild-prefix index scan over the bounded event-id primary-key lookups.
+     `WHERE e.id IN (${chunk.map(()=>'?').join(',')}) AND +e.guild=?`);
   const rows=(await env.DB.prepare(sql).bind(...chunk,run.mapping.guildId).all<KpRunMatchRow>()).results;
   const found=new Map(rows.map(row=>[row.event_id,row]));
   for(const id of chunk)recordKpRunMatch(run,id,found.get(id)??null);
