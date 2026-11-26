@@ -190,6 +190,10 @@ jobs:
     # Keep Playwright dependencies on a supported LTS image. The newer latest
     # image repeatedly stalled while fetching its changed multimedia packages.
     runs-on: ubuntu-24.04
+    # Exact Playwright release image includes the matching browsers and Ubuntu dependencies.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -206,19 +210,11 @@ jobs:
       - run: npm ci
       - name: Refresh Activity cache versions for browser tests
         run: npm run build:activity
-      - name: Use the official Ubuntu archive with bounded download waits
-        run: |
-          # The runner's regional EC2 archive repeatedly stalls on multimedia
-          # dependencies. Keep Ubuntu signature verification and package versions.
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          fi
-          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "2";' | sudo tee /etc/apt/apt.conf.d/80-playwright-downloads >/dev/null
-      - name: Install Playwright, Chromium and WebKit
+      - name: Verify pinned Playwright and preinstalled Chromium and WebKit
         timeout-minutes: 5
         run: |
           npm install --no-save playwright@1.63.0
-          npx playwright install --with-deps chromium webkit
+          node -e 'const assert=require("node:assert/strict");assert.equal(require("playwright/package.json").version,"1.63.0");const p=require("playwright");(async()=>{for(const name of ["chromium","webkit"]){const b=await p[name].launch();try{const page=await b.newPage();await page.setContent("<title>CI browser probe</title>");assert.equal(await page.title(),"CI browser probe");console.log("PLAYWRIGHT_READY "+name);}finally{await b.close();}}})().catch(e=>{console.error(e);process.exitCode=1;});'
       - name: Run every browser case in two bounded parallel lanes
         run: node scripts/ci-browser-lanes.mjs ${{ matrix.suite }}
         env:
