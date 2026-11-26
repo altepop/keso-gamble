@@ -143,6 +143,20 @@ jobs:
           GITHUB_ENV="$RUNNER_TEMP/keso-video-benchmark.env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh
           t2=$SECONDS
           printf 'CI_CHECK_SEQUENTIAL check_seconds=%s prep_seconds=%s wall_seconds=%s\\n' "$((t1-t0))" "$((t2-t1))" "$((t2-t0))"
+      - name: Same-run warmed comparison for PR 907 (no publish, no new runner)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 907
+        working-directory: .
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          bash scripts/ci-check-overlap.sh
+          overlap_end=$SECONDS
+          printf 'CI_CHECK_OVERLAP_WARM wall_seconds=%s\n' "$((overlap_end-start))"
+          (cd services/valorant-results && npm run check)
+          check_end=$SECONDS
+          GITHUB_ENV="$RUNNER_TEMP/keso-video-benchmark-warm.env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh
+          prep_end=$SECONDS
+          printf 'CI_CHECK_SEQUENTIAL_WARM check_seconds=%s prep_seconds=%s wall_seconds=%s\n' "$((check_end-overlap_end))" "$((prep_end-check_end))" "$((prep_end-overlap_end))"
       - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
         working-directory: .
         run: node --test test/duel-p12-824-read-evidence.test.mjs
