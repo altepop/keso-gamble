@@ -64,28 +64,37 @@ test('daily and ACT summaries use covering ranges with the same ties, null outco
  }finally{sql.close();}
 });
 
-test('notification prefetch reads only the current participant while preserving the exact duplicate decision and late notices',async()=>{
- const {prefetchPlayerNotices}=await import('../src/notification-indexes.ts');
+test('positive notification receipt reuse preserves all shared participants and refreshes missing peers',async()=>{
+ const {prefetchMissingMatchNotices}=await import('../src/notification-indexes.ts');
  const sql=new DatabaseSync(':memory:');
  try{
   sql.exec('CREATE TABLE notifications(riot_id TEXT,match_id TEXT,message TEXT,PRIMARY KEY(riot_id,match_id)); CREATE INDEX notifications_match_members ON notifications(match_id,riot_id)');
   const put=sql.prepare('INSERT INTO notifications VALUES(?,?,?)');
-  for(let m=0;m<100;m++)for(let p=0;p<10;p++)if(m!==99||p!==0)put.run('p'+p,'m'+m,'notice');
-  const ids=['m1','m2','m3','m4','m99','absent','m1'];
-  const old=sql.prepare('SELECT riot_id,match_id FROM notifications WHERE match_id IN ('+ids.map(()=>'?').join(',')+')').all(...ids);
+  for(let m=0;m<100;m++)for(let p=0;p<10;p++)if(m!==99||p!==9)put.run('p'+p,'m'+m,'notice');
+  const ids=['m1','m2','m3','m4','m5'];
+  const riotIds=Array.from({length:10},(_,i)=>'p'+i);
+  const candidates=ids.map(matchId=>({matchId,riotIds}));
+  const legacySql='SELECT riot_id,match_id FROM notifications WHERE match_id IN ('+ids.map(()=>'?').join(',')+')';
+  const old=sql.prepare(legacySql).all(...ids);
   let reads=0,rows=0,plan='';
   const db={prepare:(q:string)=>({bind:(...args:string[])=>({all:async()=>{reads++;plan=sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args).map(r=>String(r.detail)).join(' | ');const results=sql.prepare(q).all(...args);rows+=results.length;return {results};}})})} as unknown as D1Database;
   const saved=new Set<string>();
-  await prefetchPlayerNotices(db,'p0',ids,saved);
-  assert.deepEqual([...saved].sort(),old.filter(r=>r.riot_id==='p0').map(r=>JSON.stringify([r.riot_id,r.match_id])).sort());
-  assert.equal(rows,4);assert.equal(old.length,49);assert.equal(reads,1);
-  assert.match(plan,/riot_id=\? AND match_id=\?/);
-  console.log('NOTICE_PREFETCH '+JSON.stringify({oldReturned:old.length,newReturned:rows,plan}));
-  put.run('p0','m99','late');
-  await prefetchPlayerNotices(db,'p0',ids,saved);
-  assert.ok(saved.has(JSON.stringify(['p0','m99'])));
-  await prefetchPlayerNotices(db,'p1',ids,saved);
-  assert.ok(saved.has(JSON.stringify(['p1','m99'])));
-  await prefetchPlayerNotices(db,'p0',[],saved);assert.equal(reads,3);
+  for(let i=0;i<3;i++)await prefetchMissingMatchNotices(db,candidates,saved);
+  assert.deepEqual([...saved].sort(),old.map(r=>JSON.stringify([r.riot_id,r.match_id])).sort());
+  assert.equal(rows,50);assert.equal(old.length*3,150);assert.equal(reads,1);
+  assert.match(plan,/notifications_match_members/);
+  console.log('NOTICE_PREFETCH_POSITIVE '+JSON.stringify({oldCalls:3,newCalls:reads,oldReturned:old.length*3,newReturned:rows,plan}));
+  await prefetchMissingMatchNotices(db,[{matchId:'m99',riotIds}],saved);
+  assert.ok(!saved.has(JSON.stringify(['p9','m99'])));
+  put.run('p9','m99','late');
+  await prefetchMissingMatchNotices(db,[{matchId:'m99',riotIds}],saved);
+  assert.ok(saved.has(JSON.stringify(['p9','m99'])));
+  assert.equal(reads,3);
+  await prefetchMissingMatchNotices(db,[{matchId:'m99',riotIds}],saved);
+  assert.equal(reads,3);
+  await prefetchMissingMatchNotices(db,[{matchId:'m99',riotIds}],new Set());
+  assert.equal(reads,4,'new cron never reuses previous receipt set');
+  await prefetchMissingMatchNotices(db,[{matchId:'m99',riotIds:[]}],saved);
+  assert.equal(reads,5,'unknown participants conservatively read all receipts');
  }finally{sql.close();}
 });
