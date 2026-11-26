@@ -95,7 +95,8 @@ test('only ordinary competitive has a daily limit; unlimited other purchases, le
  await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10005','horse-buy',{box:'normal',name:'ウマ4'}),/3頭まで/);
  await operateKp(f.env,mapping,one,'directive-op-000005','directive',{target:two,task:'competitive'});
  assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:1,horse:0,luxury:0});
- assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_horses').get()!.n),3);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_horses WHERE sold_at IS NULL AND retired_at IS NULL').get()!.n),3);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_horses').get()!.n),4);
 });
 
 test('owned horses enter races of their class once betting opens, and change the card and odds', async () => {
