@@ -74,6 +74,41 @@ function checkRectInside(inner,outer,label){
   assert.match(await page.locator('#music-lyrics-content').innerText(),/まさかね/);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#music-panel').isHidden(),true,'Escape closes dialog');
+  // Exercise the exact CSS selectors independently of autoplay policy and spin outcomes.
+  const motifs=await page.evaluate(()=>{
+   const app=document.querySelector('#app'),open=document.querySelector('#keso-music .music-open');
+   const fixture=document.createElement('section');
+   fixture.className='slot-arena';
+   fixture.innerHTML='<div class="slot-marquee"><small>FORTUNE</small></div><div class="slot-machine"></div>';
+   app.appendChild(fixture);
+   const songs=[...document.querySelectorAll('#keso-music .music-song')];
+   const previous=songs.map(el=>el.getAttribute('aria-current'));
+   const playing=open.classList.contains('playing');
+   const read=()=>getComputedStyle(fixture.querySelector('small'),'::after').content;
+   const choose=id=>songs.forEach(el=>el.setAttribute('aria-current',String(el.id==='music-song-'+id)));
+   try{
+    open.classList.remove('playing');choose('mou');
+    const stopped=read();
+    open.classList.add('playing');
+    const normal=read();
+    choose('kyohansha');const midnight=read();
+    choose('relic');const relic=read();
+    choose('fullpa');const fullpa=read();
+    choose('makekowa');const fire=read();
+    open.classList.remove('playing');const stoppedAgain=read();
+    return {stopped,normal,midnight,relic,fullpa,fire,stoppedAgain};
+   }finally{
+    fixture.remove();open.classList.toggle('playing',playing);
+    songs.forEach((el,i)=>previous[i]===null?el.removeAttribute('aria-current'):el.setAttribute('aria-current',previous[i]));
+   }
+  });
+  assert.equal(motifs.stopped,motifs.stoppedAgain);
+  assert.match(motifs.normal,/♫/);
+  assert.match(motifs.midnight,/02:00/);
+  assert.match(motifs.relic,/𓂀/);
+  assert.match(motifs.fullpa,/⚡/);
+  assert.match(motifs.fire,/🔥/);
+  assert.doesNotMatch(motifs.stopped,/♫|02:00|𓂀|⚡|🔥/);
   assert.equal(errors.length,0,'browser console errors: '+errors.join('; '));
   console.log('Music modal layout passed: '+engine+' '+dims.width+'x'+dims.height);
   await ctx.close();
