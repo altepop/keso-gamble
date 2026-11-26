@@ -85,5 +85,23 @@ test('archive audit materializes compact flags and preserves every aggregate on 
   assert.deepEqual(db.prepare(nextSql).get(),db.prepare(oldSql).get());
   assert.match(nextSql,/WITH targets AS MATERIALIZED/);
   assert.match(db.prepare('EXPLAIN QUERY PLAN '+nextSql).all().map(r=>r.detail).join(' | '),/MATERIALIZE targets/);
+  const {Miniflare}=await import('miniflare');
+  const runtime=new Miniflare({workers:[{config:{name:'archive-read-test',compatibilityDate:'2026-10-24',env:{DB:{type:'d1'}},manifest:{mainModule:'worker.mjs',modules:{'worker.mjs':{type:'esm',contents:'export default {fetch(){return new Response("ok")}}'}}}}}]});
+  try{
+   const d1=await runtime.getD1Database('DB','archive-read-test');
+   for(const table of ['valorant_match_rosters','valorant_match_round_events','tracked_players','monitor_state']){
+    const ddl=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table).sql;
+    await d1.prepare(ddl).run();
+    const rows=db.prepare('SELECT * FROM '+table).all();
+    for(let i=0;i<rows.length;i+=50)await d1.batch(rows.slice(i,i+50).map(row=>{
+     const values=Object.values(row);return d1.prepare('INSERT INTO '+table+' VALUES('+values.map(()=>'?').join(',')+')').bind(...values);
+    }));
+   }
+   const before=await d1.prepare(oldSql).all(),after=await d1.prepare(nextSql).all();
+   assert.deepEqual(after.results,before.results);
+   console.log('ARCHIVE_AUDIT_D1_ROWS '+JSON.stringify({before:before.meta.rows_read,after:after.meta.rows_read}));
+   assert.ok(after.meta.rows_read<before.meta.rows_read,'same-fixture D1 read count must improve');
+  }finally{await runtime.dispose();}
+
  }finally{db.close();f.cleanup();}
 });
