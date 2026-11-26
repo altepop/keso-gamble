@@ -12,9 +12,11 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
  if(!token||!/^[0-9a-f]{32}$/i.test(account??'')||
     !/^[0-9a-f-]{36}$/i.test(binding?.database_id??'')||
     config.name!=='valorant-results')throw Error('Missing verified live D1 configuration');
- const sql=`WITH targets AS (
-   SELECT r.match_id,r.ended_at,e.match_id AS archived,
-    e.rounds_json,e.kills_json,
+ // Materialize only scalar flags: each historical state lookup is evaluated once.
+ // Do not spool the large raw round or kill JSON payloads.
+ const sql=`WITH targets AS MATERIALIZED (
+   SELECT r.ended_at,e.match_id IS NOT NULL AS archived,
+    e.rounds_json IS NOT NULL AS has_rounds,e.kills_json IS NOT NULL AS has_kills,
     EXISTS(SELECT 1 FROM json_each(r.players_json) p
      JOIN tracked_players t ON lower(t.riot_id)='dolly#sdgs'
      WHERE json_extract(p.value,'$.name')='Dolly'
@@ -33,26 +35,26 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
       AND json_extract(p.value,'$.tag')='SDGs')
  )
  SELECT COUNT(*) AS roster_count,
-   COALESCE(SUM(CASE WHEN rounds_json IS NOT NULL AND kills_json IS NOT NULL THEN 1 ELSE 0 END),0) AS complete_count,
-   COALESCE(SUM(CASE WHEN archived IS NULL THEN 1 ELSE 0 END),0) AS missing_count,
-   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND (rounds_json IS NULL OR kills_json IS NULL) THEN 1 ELSE 0 END),0) AS partial_count,
+   COALESCE(SUM(CASE WHEN has_rounds=1 AND has_kills=1 THEN 1 ELSE 0 END),0) AS complete_count,
+   COALESCE(SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END),0) AS missing_count,
+   COALESCE(SUM(CASE WHEN archived=1 AND (has_rounds=0 OR has_kills=0) THEN 1 ELSE 0 END),0) AS partial_count,
    COALESCE(SUM(CASE WHEN unavailable_reason IS NOT NULL THEN 1 ELSE 0 END),0) AS unavailable_count,
-   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND rounds_json IS NOT NULL
-      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS missing_kills_only,
-   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND rounds_json IS NULL
-      AND kills_json IS NOT NULL THEN 1 ELSE 0 END),0) AS missing_rounds_only,
+   COALESCE(SUM(CASE WHEN archived=1 AND has_rounds=1
+      AND has_kills=0 THEN 1 ELSE 0 END),0) AS missing_kills_only,
+   COALESCE(SUM(CASE WHEN archived=1 AND has_rounds=0
+      AND has_kills=1 THEN 1 ELSE 0 END),0) AS missing_rounds_only,
    COALESCE(SUM(CASE WHEN unavailable_reason='missing_kills' THEN 1 ELSE 0 END),0) AS reason_missing_kills,
    COALESCE(SUM(CASE WHEN unavailable_reason='missing_rounds' THEN 1 ELSE 0 END),0) AS reason_missing_rounds,
    COALESCE(SUM(CASE WHEN unavailable_reason='no_round_data' THEN 1 ELSE 0 END),0) AS reason_no_round_data,
    COALESCE(SUM(CASE WHEN unavailable_reason='404' THEN 1 ELSE 0 END),0) AS reason_not_found,
    COALESCE(SUM(CASE WHEN retry_attempted=1 THEN 1 ELSE 0 END),0) AS retry_attempts,
-   COALESCE(SUM(CASE WHEN retry_attempted=1 AND rounds_json IS NOT NULL
-      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS retry_still_missing_kills,
+   COALESCE(SUM(CASE WHEN retry_attempted=1 AND has_rounds=1
+      AND has_kills=0 THEN 1 ELSE 0 END),0) AS retry_still_missing_kills,
    COALESCE(SUM(CASE WHEN legacy_v2_attempted=1 THEN 1 ELSE 0 END),0) AS legacy_v2_attempts,
-   COALESCE(SUM(CASE WHEN legacy_v2_attempted=1 AND rounds_json IS NOT NULL
-      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS legacy_v2_still_missing_kills,
+   COALESCE(SUM(CASE WHEN legacy_v2_attempted=1 AND has_rounds=1
+      AND has_kills=0 THEN 1 ELSE 0 END),0) AS legacy_v2_still_missing_kills,
    COALESCE(SUM(CASE WHEN current_puuid_match=0 THEN 1 ELSE 0 END),0) AS historical_puuid_mismatch,
-   COALESCE(SUM(CASE WHEN (rounds_json IS NULL OR kills_json IS NULL)
+   COALESCE(SUM(CASE WHEN (has_rounds=0 OR has_kills=0)
      AND unavailable_reason IS NULL AND ended_at<${Math.floor(now-120000)}
      THEN 1 ELSE 0 END),0) AS eligible_backlog,
    (SELECT value FROM monitor_state WHERE key='coach_round_backfill:enabled') AS switch_value,
