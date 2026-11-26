@@ -12,9 +12,9 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
  if(!token||!/^[0-9a-f]{32}$/i.test(account??'')||
     !/^[0-9a-f-]{36}$/i.test(binding?.database_id??'')||
     config.name!=='valorant-results')throw Error('Missing verified live D1 configuration');
- // Materialize only scalar flags: each historical state lookup is evaluated once.
- // Do not spool the large raw round or kill JSON payloads.
- const sql=`WITH targets AS MATERIALIZED (
+ // Indexed one-to-one state joins reuse each lookup across aggregates.
+ // Avoid materializing a temporary row for every historical roster.
+ const sql=`WITH targets AS (
    SELECT r.ended_at,e.match_id IS NOT NULL AS archived,
     e.rounds_json IS NOT NULL AS has_rounds,e.kills_json IS NOT NULL AS has_kills,
     EXISTS(SELECT 1 FROM json_each(r.players_json) p
@@ -22,14 +22,14 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
      WHERE json_extract(p.value,'$.name')='Dolly'
        AND json_extract(p.value,'$.tag')='SDGs'
        AND json_extract(p.value,'$.puuid')=t.puuid) AS current_puuid_match,
-    (SELECT value FROM monitor_state s
-     WHERE s.key='coach_round_backfill:unavailable:'||r.match_id) AS unavailable_reason,
-    EXISTS(SELECT 1 FROM monitor_state s
-     WHERE s.key='coach_round_backfill:retry_once:'||r.match_id) AS retry_attempted,
-    EXISTS(SELECT 1 FROM monitor_state s
-     WHERE s.key='coach_round_backfill:legacy_v2_once:'||r.match_id) AS legacy_v2_attempted
+    unavailable.value AS unavailable_reason,
+    retry.key IS NOT NULL AS retry_attempted,
+    legacy.key IS NOT NULL AS legacy_v2_attempted
    FROM valorant_match_rosters r
    LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
+   LEFT JOIN monitor_state unavailable ON unavailable.key='coach_round_backfill:unavailable:'||r.match_id
+   LEFT JOIN monitor_state retry ON retry.key='coach_round_backfill:retry_once:'||r.match_id
+   LEFT JOIN monitor_state legacy ON legacy.key='coach_round_backfill:legacy_v2_once:'||r.match_id
    WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p
     WHERE json_extract(p.value,'$.name')='Dolly'
       AND json_extract(p.value,'$.tag')='SDGs')

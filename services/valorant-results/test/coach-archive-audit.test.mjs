@@ -61,7 +61,7 @@ test('rejects inconsistent totals and malformed configuration',async()=>{
  }finally{f.cleanup()}
 });
 
-test('archive audit materializes compact flags and preserves every aggregate on identical fixture',async()=>{
+test('archive audit joins indexed flags once and preserves every aggregate on identical fixture',async()=>{
  const {DatabaseSync}=await import('node:sqlite');
  const f=fixture(),db=new DatabaseSync(':memory:');
  try{
@@ -83,8 +83,10 @@ test('archive audit materializes compact flags and preserves every aggregate on 
    return {ok:true,json:async()=>({success:true,result:[{success:true,results:[db.prepare(nextSql).get()]}]})};
   },220000);
   assert.deepEqual(db.prepare(nextSql).get(),db.prepare(oldSql).get());
-  assert.match(nextSql,/WITH targets AS MATERIALIZED/);
-  assert.match(db.prepare('EXPLAIN QUERY PLAN '+nextSql).all().map(r=>r.detail).join(' | '),/MATERIALIZE targets/);
+  const plan=db.prepare('EXPLAIN QUERY PLAN '+nextSql).all().map(r=>r.detail).join(' | ');
+  assert.doesNotMatch(plan,/MATERIALIZE targets/);
+  for(const alias of ['unavailable','retry','legacy'])assert.match(plan,new RegExp('SEARCH '+alias+' USING .*\\(key=\\?\\)'));
+  console.log('ARCHIVE_AUDIT_PLAN '+plan);
   const {Miniflare}=await import('miniflare');
   const runtime=new Miniflare({workers:[{config:{name:'archive-read-test',compatibilityDate:'2026-10-24',env:{DB:{type:'d1'}},manifest:{mainModule:'worker.mjs',modules:{'worker.mjs':{type:'esm',contents:'export default {fetch(){return new Response("ok")}}'}}}}}]});
   try{
