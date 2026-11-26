@@ -130,6 +130,19 @@ jobs:
       - name: Check Worker and prepare offline race video concurrently
         working-directory: .
         run: bash scripts/ci-check-overlap.sh
+      - name: Same-run sequential baseline for PR 907 (isolated, no publish)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 907
+        working-directory: .
+        run: |
+          set -euo pipefail
+          t0=$SECONDS
+          (cd services/valorant-results && npm run check)
+          t1=$SECONDS
+          # Re-run the exact original video preparation on this same runner.
+          # Never write to the globally published GITHUB_ENV or post to Discord.
+          GITHUB_ENV="$RUNNER_TEMP/keso-video-benchmark.env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh
+          t2=$SECONDS
+          printf 'CI_CHECK_SEQUENTIAL check_seconds=%s prep_seconds=%s wall_seconds=%s\\n' "$((t1-t0))" "$((t2-t1))" "$((t2-t0))"
       - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
         working-directory: .
         run: node --test test/duel-p12-824-read-evidence.test.mjs
