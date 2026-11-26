@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-ca5d2ee9a5a25ff4';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-630e0735be90dea5';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -81,6 +81,8 @@ export const CHAOS_RACE_TYPES=[
 export const FESTIVAL_FROM=Date.parse('2026-11-11T00:00:00+09:00');
 export const FESTIVAL_FIRST=Date.parse('2026-11-14T22:00:00+09:00');
 export const FESTIVAL_PRICE=1000,FESTIVAL_MAX_ODDS10=1000000;
+// A date gate preserves every previously committed festival card and its payouts.
+export const FESTIVAL_EXPANDED_FROM=Date.parse('2026-11-27T00:00:00+09:00');
 export function festivalRace(start){
  if(!isRaceStart(start)||start<FESTIVAL_FROM)return null;
  const week=weekStart(start);
@@ -92,6 +94,21 @@ export function festivalRace(start){
   if(start!==week+chosenDay*86400000+(chosenHour*60+45)*60000)return null;
  }
  return {id:'festival',name:'一枚で億り人杯',effect:'1人1枚・オッズ非公開・最大1億KP',desc:'馬券は全員1,000 KP。倍率はゴールまで秘密。的中した馬券に秘蔵倍率を適用。購入後の追加・変更はできません。'};
+}
+export const festivalExpanded=start=>start>=FESTIVAL_EXPANDED_FROM&&!!festivalRace(start);
+// Festival-only race-paper gossip. A little real signal, plenty of uncertainty;
+// this is presentation only, never changes performance, ranking or settlement.
+export function festivalRumor(card,h){
+ const rng=rngFrom(`festival-rumor-v1:${card.id}:${h.horseId??h.number}`);
+ const ability=h.ability-CLASSES[card.raceClass].mean;
+ const trainingScore=ability*1.1+(rng()-.5)*1.6;
+ const conditionScore=(h.condition-2)*.18+(rng()-.5)*1.25;
+ const fit=runningNotes(card,h).trackFit;
+ const groundScore=(fit==='◎'?.35:fit==='○'?.08:-.25)+(rng()-.5)*1.1;
+ const training=trainingScore>.45?'鋭い動きとの目撃談':trainingScore>-.2?'仕上がりは悪くないという声':'調教班の評価は割れている';
+ const condition=conditionScore>.32?'元気そうとの噂':conditionScore>-.28?'今日の気配は読めない':'落ち着きがないとの声も';
+ const ground=groundScore>.3?'この馬場が合うとの説':groundScore>-.28?'馬場への適性は未知数':'馬場に不安ありとの噂';
+ return {training,condition,ground};
 }
 export function festivalFactor(seed){
  const r=rngFrom('festival-payout-v1:'+seed)();
@@ -143,7 +160,7 @@ export function raceClass(start){if(festivalRace(start))return 4;const base=pick
 export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
- const big=bigRaceName(start),size=big||festivalRace(start)?10:8,cls=raceClass(start);
+ const big=bigRaceName(start),size=festivalExpanded(start)?16:(big||festivalRace(start)?10:8),cls=raceClass(start);
  const names=start<NAME_EXPANSION_FROM?[...LEGACY_HORSE_NAMES]:[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
@@ -323,7 +340,7 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
 export function createRacing(){return {raceBets:[],raceWeek:{start:0,spent:0}};}
 function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
-function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=10):validInt(b.horse,1)&&b.horse<=10)&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&(validInt(b.odds,10)||(b.festival===true&&festivalRace(b.raceId)&&b.status==='pending'&&b.odds===null))&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
+function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=(festivalExpanded(b.raceId)?16:10)):validInt(b.horse,1)&&b.horse<=(festivalExpanded(b.raceId)?16:10))&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&(validInt(b.odds,10)||(b.festival===true&&festivalRace(b.raceId)&&b.status==='pending'&&b.odds===null))&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
 export function hydrateRacing(raw){
  const racing=createRacing();
  // Every unsettled ticket stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.
@@ -401,12 +418,26 @@ export function validHorseName(name){
  if(value.length<1||value.length>12||/[\u0000-\u001f@#`*_~<>|\\/:]/.test(value)||/https?|www\./i.test(value))throw Error('馬の名前は1〜12文字で、記号やURLは使えません');
  return value;
 }
-/** One JST day's exchanges (directives, boxes, luxury items). */
+/** Independent JST-day limits. Legacy aggregate counts are conservatively
+ * retained until the server reconstructs the actual categories from receipts. */
 export function exchangeDay(now){return new Date(now+JST).toISOString().slice(0,10);}
-export function useExchange(state,now){
- const day=exchangeDay(now),count=state.exchange?.day===day?state.exchange.count:0;
- if(count>=DAILY_EXCHANGES)throw Error(`指令・ボックスなどの交換は1日${DAILY_EXCHANGES}回までです（朝0時に戻ります）`);
- state.exchange={day,count:count+1};
+const exchangeLabels={directive:'指令の発行',horse:'馬主ボックスの購入',luxury:'超高級品の購入'};
+const exchangeCount=value=>Number.isSafeInteger(value)&&value>=0?Math.min(value,DAILY_EXCHANGES):0;
+export function exchangeCounts(state,now){
+ const old=state.exchange,day=exchangeDay(now);
+ const legacy=old?.day===day?exchangeCount(old.count):0;
+ return Object.fromEntries(Object.keys(exchangeLabels).map(key=>[key,old?.day===day&&old.byCategory?exchangeCount(old.byCategory[key]):legacy]));
+}
+export function exchangeRemaining(state,now,category){
+ if(!Object.hasOwn(exchangeLabels,category))throw Error('交換の種類が不正です。');
+ return DAILY_EXCHANGES-exchangeCounts(state,now)[category];
+}
+export function useExchange(state,now,category){
+ if(!Object.hasOwn(exchangeLabels,category))throw Error('交換の種類が不正です。');
+ const byCategory=exchangeCounts(state,now);
+ if(byCategory[category]>=DAILY_EXCHANGES)throw Error(`${exchangeLabels[category]}は1日${DAILY_EXCHANGES}回までです（午前0時に戻ります）`);
+ byCategory[category]++;
+ state.exchange={day:exchangeDay(now),count:Object.values(byCategory).reduce((sum,n)=>sum+n,0),byCategory};
 }
 /** A nickname from a horse's record. `runs` are newest first: {rank, winOdds (tenths), favourite}. */
 export function horseNickname({wins=0,seconds=0},runs=[]){

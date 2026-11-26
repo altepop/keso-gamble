@@ -2,6 +2,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 
 export const DIRECTIVE_HOUR=3600000;
 export const DIRECTIVE_EARLY_BONUS=1000;
+export const DIRECTIVE_ACTIVE_LIMIT=2;
 // Side tables preserve original prices, timestamps and existing histories. Ledger IDs are
 // globally unique and each trigger executes in the same transaction as its receipt.
 const refundSql=(stage:number,source:string,when:string,clock:string)=>`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
@@ -23,7 +24,7 @@ export const directiveSchema=[
  AND d.at<=NEW.at-${24*DIRECTIVE_HOUR} AND d.target!=json_extract(NEW.response,'$.result.target')
  AND NEW.user!=json_extract(NEW.response,'$.result.target')
  AND NOT EXISTS(SELECT 1 FROM kp_directive_transfers t WHERE t.directive_id=d.id)
- AND NOT EXISTS(SELECT 1 FROM kp_directives a WHERE a.guild=d.guild AND a.target=json_extract(NEW.response,'$.result.target') AND a.status='active');
+ AND NOT EXISTS(SELECT 1 FROM kp_directives a WHERE a.guild=d.guild AND a.target=json_extract(NEW.response,'$.result.target') AND a.status='active' LIMIT 1 OFFSET ${DIRECTIVE_ACTIVE_LIMIT-1});
  SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'directive_transfer_conflict') END;
  END`,
  `CREATE TRIGGER IF NOT EXISTS kp_directive_completion_apply AFTER INSERT ON kp_directive_completions BEGIN
@@ -36,15 +37,33 @@ export const directiveSchema=[
  SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'directive_completion_conflict') END;
  END`
 ];
+// Replace the legacy unique index and transfer trigger atomically, preserving all rows.
+const activeLimitMigration=[
+ "CREATE INDEX IF NOT EXISTS kp_directive_active_target ON kp_directives(guild,target) WHERE status='active'",
+ `CREATE TRIGGER IF NOT EXISTS kp_directive_cap_insert BEFORE INSERT ON kp_directives
+ WHEN NEW.status='active' AND EXISTS(SELECT 1 FROM kp_directives WHERE guild=NEW.guild AND target=NEW.target AND status='active' LIMIT 1 OFFSET ${DIRECTIVE_ACTIVE_LIMIT-1})
+ BEGIN SELECT RAISE(ABORT,'kp_directive_active_limit'); END`,
+ `CREATE TRIGGER IF NOT EXISTS kp_directive_cap_update BEFORE UPDATE OF guild,target,status ON kp_directives
+ WHEN NEW.status='active' AND EXISTS(SELECT 1 FROM kp_directives WHERE guild=NEW.guild AND target=NEW.target AND status='active' AND id!=OLD.id LIMIT 1 OFFSET ${DIRECTIVE_ACTIVE_LIMIT-1})
+ BEGIN SELECT RAISE(ABORT,'kp_directive_active_limit'); END`,
+ "DROP INDEX IF EXISTS kp_directive_active",
+ "DROP TRIGGER IF EXISTS kp_directive_transfer_operation",
+ directiveSchema[4]!,
+ "INSERT OR REPLACE INTO kp_settings(key,value) VALUES('directive_active_limit_version','2')"
+];
 const lifecycleReady=new WeakMap<object,Promise<void>>();
 export async function ensureDirectiveLifecycle(env:KpEnv){
  const prior=lifecycleReady.get(env.DB);if(prior)return prior;
- const job=(async()=>{await env.DB.batch(directiveSchema.map(sql=>env.DB.prepare(sql)));})();
+ const job=(async()=>{
+  await env.DB.batch(directiveSchema.map(sql=>env.DB.prepare(sql)));
+  const version=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='directive_active_limit_version'").first<{value:string}>();
+  if(version?.value!=='2')await env.DB.batch(activeLimitMigration.map(sql=>env.DB.prepare(sql)));
+ })();
  lifecycleReady.set(env.DB,job);
  try{await job;}catch(error){lifecycleReady.delete(env.DB);throw error;}
 }
 // Run after match collection, not before. No historical scan: the partial index contains
-// only active directives, at most one per eligible target. No clawback on late ingestion.
+// only active directives, at most two per eligible target. No clawback on late ingestion.
 export async function refundDueDirectives(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await env.DB.batch([1,2].map(stage=>env.DB.prepare(refundSql(stage,'','d.guild=? AND d.status=\'active\' AND d.at<=? AND NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id=\'directive-refund-'+stage+':\'||d.id)','?')).bind(now,mapping.guildId,now-(stage===1?24:48)*DIRECTIVE_HOUR)));
 }
@@ -61,6 +80,6 @@ export async function directiveTransferResult(env:KpEnv,mapping:KpMapping,user:s
  const row=await env.DB.prepare(`SELECT d.target,d.at,d.status,t.directive_id AS transferred FROM kp_directives d
  LEFT JOIN kp_directive_transfers t ON t.directive_id=d.id WHERE d.id=? AND d.guild=? AND d.issuer=?`).bind(id,mapping.guildId,user).first<{target:string;at:number;status:string;transferred:string|null}>();
  if(!row||row.status!=='active'||row.transferred||row.target===target||now-row.at<24*DIRECTIVE_HOUR)throw Error('この指令は乗り換えできません。発令から24時間後、未達成の指令を1回だけ変更できます。');
- if(await env.DB.prepare("SELECT 1 FROM kp_directives WHERE guild=? AND target=? AND status='active'").bind(mapping.guildId,target).first())throw Error('その相手には実行中の指令があります。');
+ if(await env.DB.prepare("SELECT 1 FROM kp_directives WHERE guild=? AND target=? AND status='active' LIMIT 1 OFFSET ?").bind(mapping.guildId,target,DIRECTIVE_ACTIVE_LIMIT-1).first())throw Error('その相手の未達成指令は2件までです。');
  return {directiveTransfer:id,target};
 }

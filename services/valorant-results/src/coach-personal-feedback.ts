@@ -81,7 +81,7 @@ export function largestObservedSwing(row:Archive,puuid:string):{round:number;des
  return candidate?{round:candidate.round,description:candidate.description}:null;
 }
 type Metric={key:string;label:string;current?:{value:number}|null;baseline?:{value:number;matches:number}|null};
-type Session={date:string|null;map:string;agent:string;topic?:string;lesson:{practice:{name:string};track:string;nextGame?:string};followUp?:{title?:string;status?:string};metrics:Metric[]};
+type Session={date:string|null;map:string;agent:string;topic?:string;lesson:{practice:{name:string;minutes?:number;steps?:string[]};track:string;nextGame?:string;meaning?:string;why?:string;alternatives?:string;selfCheck?:string};followUp?:{title?:string;status?:string;text?:string};metrics:Metric[];previousTopic?:string|null;evidence?:string[];eventVerified?:boolean};
 type Daily={warmup:{title:string}|null;study:{map:string;theme:string;origin?:'match'|'daily'}|null};
 // Advice inventory (feedback-advice-patterns). Only patterns whose trigger is
 // detectable from the saved session, the observed swing, the local hour or the
@@ -225,6 +225,76 @@ function detailedWarmup(pattern:AdvicePattern|null,fallback:string):string{
   '最初はゆっくり正しい動きを確認する。形が崩れたらいったん止め、同じ順序でやり直す。'
  ].join('\n'):'';
 }
+// Compact Discord coaching, not a copy of the analytical report.
+type CompactPlan={why:string;action:string;drills:readonly [string,string];repeat:readonly [readonly [string,string],readonly [string,string]]};
+const COMPACT_PLANS:Record<string,CompactPlan>={
+ pressure:{why:'交戦を増やすより、次のラウンドに有利を残せる生存を優先しましょう。',action:'最初の3交戦は、退路を決めてから角を一つずつ見ましょう。',drills:['退ける遮蔽を2つ確認','角を一つずつ開いて停止射撃を5回'],repeat:[['死亡した1交戦を振り返り、必要なカバーか別射線かを確認','次戦で先に見る角と退路を決める'],['同じ入口で引き直す動きを5回','射撃場で短い射撃→移動を左右10回']]},
+ reset:{why:'取った人数差を手放さないことが大切です。',action:'最初の3キル後、残弾と味方を確認し、続行か撤退かを選びましょう。',drills:['キル後に遮蔽へ戻る動きを5回','残弾確認→再照準を5回'],repeat:[['キル直後の1交戦を振り返る','続行・撤退の条件を一つずつ決める'],['遮蔽へ退く経路を2通り試す','短いバースト→横移動を左右10回']]},
+ cover:{why:'距離だけでなく、同じ敵へ撃てる射線を作りましょう。',action:'攻撃の最初の3Rは、カバーする味方を一人決めましょう。',drills:['同じ角を見られる位置を2つ確認','デュオなら先頭とカバーを5回交代。一人なら合図を決める'],repeat:[['取り返しがなかった1交戦を振り返る','壁・距離・別担当のどれかを確認'],['重ならない射線を2つ探す','味方の合図で同じ角へ出る動きを5回']]},
+ conversion:{why:'削った敵を自分で追う必要はありません。味方の回収も活かしましょう。',action:'次戦は短い射撃で再照準し、削った敵の位置を伝えましょう。',drills:['射撃場で移動→停止→2〜3発を左右10回','削った敵を味方が回収したか1交戦確認'],repeat:[['倒し切れなかった1交戦を振り返る','削った敵の位置を伝える合図を決める'],['近距離・中距離の短いバースト各10回','外したら横移動→停止→再照準を10回']]},
+ participation:{why:'キルを追うより、担当を守りながら味方の交戦に間に合わせましょう。',action:'最初の3Rで、担当位置を維持するか合流するかを意識して選びましょう。',drills:['味方が接敵した1Rを振り返る','担当位置から合流する経路を2つ歩く'],repeat:[['担当を守る条件と合流する条件を決める','合流の合図を味方に一言伝える準備'],['合流経路で武器を出す地点を確認','途中で見る角を2つ選んで5回歩く']]},
+ timing:{why:'個人のキル数だけではラウンドを取り切れません。味方と動くタイミングを揃えましょう。',action:'最初の3Rで、仕掛ける合図を一つ決めて役割を実行しましょう。',drills:['先頭・カバー・スキルの順番を決める','入口で味方を待てる遮蔽を2つ確認'],repeat:[['味方に伝える合図を一つ決める','前の1Rで合図を出せたか振り返る'],['同じ入口で即合流・待機を各5回','準備が遅れた味方を待つ位置を2つ確認']]},
+ repeat:{why:'良かった準備を言葉にして、再現できる形にしましょう。',action:'次戦の最初の3交戦で、良かった照準か位置取りを一つ再現しましょう。',drills:['良かった1交戦の照準・遮蔽をメモ','同じ角への入り方を5回再現'],repeat:[['前の成功場面から再現できる要素を選ぶ','次戦の確認項目を一つ決める'],['近い角と遠い角で同じ準備を各5回','位置・距離が変わった場合の違いを確認']]},
+ foundation:{why:'まだ弱点を絞れません。まず動きの再現性を確認しましょう。',action:'最初の3交戦は、移動→停止→射撃の順序を意識しましょう。',drills:['射撃場で静止射撃を10回','左右移動→停止→短い射撃を各10回'],repeat:[['静止と移動後の射撃を各10回比較','初弾が安定する距離で成功回数を数える'],['距離を変えて停止射撃を左右10回','2〜3発ごとに横移動と再照準を挟む']]}
+};
+const ROLE_DRILLS:Record<string,string>={
+ 'センチネル':'裏・別入口の担当と退避・合流の条件を確認',
+ 'コントローラー':'スモーク設置→武器に戻す手順を5回',
+ 'イニシエーター':'索敵・妨害→武器に戻して味方へ追従する手順を5回',
+ 'デュエリスト':'味方の合図→進入→カバーが届く位置までの動きを5回'
+};
+const AGENT_ROLES:Record<string,string>={Cypher:'センチネル',Clove:'コントローラー',Sova:'イニシエーター'};
+function compactFact(session:Session,older:Session|undefined):string{
+ const metric=(s:Session|undefined,key:string)=>s?.metrics.find(m=>m.key===key);
+ const delta=(key:string)=>{
+  const m=metric(session,key);
+  return m?.baseline&&m.baseline.matches>=2&&Number.isFinite(m.baseline.value)&&Number.isFinite(m.current?.value)
+   ?Number((m.current!.value-m.baseline.value).toFixed(9)):null;
+ };
+ const k=delta('kpr'),d=delta('dpr');
+ const currentK=metric(session,'kpr')?.current?.value,previousK=metric(older,'kpr')?.current?.value;
+ const change=(n:number,label:string)=>label+'約'+Math.abs(n*10).toFixed(1)+'回'+(n>0?'増':'減');
+ if(session.topic==='pressure'&&d!==null&&d>=0.1){
+  const previousUp=Number.isFinite(currentK)&&Number.isFinite(previousK)&&currentK!>previousK!+0.000001;
+  return (previousUp?'前回よりキルのペースは上がりましたが、':'')+'直近平均より10Rあたり'+change(d,'デス')+(k!==null&&k<=-0.1?'、'+change(k,'キル'):'')+'。';
+ }
+ if((session.topic==='conversion'||session.topic==='participation')&&k!==null&&k<=-0.1)
+  return '直近平均より10Rあたり'+change(k,'キル')+'。'+(session.topic==='conversion'?'与ダメージは維持しています。':'');
+ if(session.eventVerified){
+  const evidence=session.evidence?.find(x=>x.startsWith('全10人K/D照合済み'))??'';
+  const m=session.topic==='reset'?evidence.match(/敵キル(\d+)回、その各キルの後5秒以内に本人死亡(\d+)回/):session.topic==='cover'?evidence.match(/既知の敵による死亡(\d+)回、味方の5秒以内の取り返し(\d+)回/):null;
+  if(m)return session.topic==='reset'?'敵を倒した'+m[1]+'回のうち、5秒以内の死亡が'+m[2]+'回。':'敵に倒された'+m[1]+'回のうち、味方の5秒以内の取り返しが'+m[2]+'回。';
+ }
+ const facts=session as Session & {kills?:number|null;deaths?:number|null};
+ if(Number.isFinite(facts.kills)&&Number.isFinite(facts.deaths))return '今回は'+facts.kills+'K・'+facts.deaths+'D。';
+ if(session.topic==='repeat'&&k!==null&&k>=0.1&&d!==null&&d<=-0.1)return '直近平均より10Rあたり'+change(k,'キル')+'、'+change(d,'デス')+'。';
+ return session.topic==='foundation'?'今回の記録を比較の出発点にします。':'今回の記録では'+({pressure:'死亡した交戦',reset:'キル直後',cover:'味方の取り返し',conversion:'倒し切り',participation:'交戦への参加',timing:'味方とのタイミング',repeat:'良かった準備'}[session.topic as 'pressure']??'次戦の行動')+'を確認します。';
+}
+function adaptivePrescription(session:Session,history:readonly Session[]=[]):{advice:string;warmup:string}|null{
+ const l=session.lesson,p=l.practice,plan=COMPACT_PLANS[session.topic??''];
+ if(!plan||!l.meaning||!l.nextGame||!Array.isArray(p.steps)||p.steps.length<3||
+  !Number.isFinite(p.minutes)||p.minutes!<1||p.minutes!>20)return null;
+ const at=Date.parse(session.date??'');
+ const earlier=Number.isFinite(at)?history.filter(s=>{const t=Date.parse(s.date??'');return Number.isFinite(t)&&t<at;})
+  .sort((a,b)=>Date.parse(b.date!)-Date.parse(a.date!)).slice(0,10):[];
+ const unique=earlier.filter((s,i)=>earlier.findIndex(x=>Date.parse(x.date!)===Date.parse(s.date!))===i&&
+  earlier.filter(x=>Date.parse(x.date!)===Date.parse(s.date!)).length===1);
+ let streak=0;
+ for(const older of unique){if(older.topic!==session.topic)break;streak++;}
+ if(!earlier.length&&session.topic&&session.previousTopic===session.topic)streak=1;
+ const role=l.meaning.match(/（(センチネル|コントローラー|イニシエーター|デュエリスト)）/)?.[1]??AGENT_ROLES[session.agent];
+ const agent=session.agent&&session.agent!=='不明'?text(session.agent,24):'';
+ const mapName=session.map&&session.map!=='不明'?text(session.map,24):'';
+ const repeat=streak>0;
+ const focus=session.topic==='pressure'&&role==='センチネル'?(agent?agent+'は':'センチネルは')+'生存しながら守備の価値を残すことを優先しましょう。':plan.why;
+ const follow=repeat?'同じ課題が続いているので練習方法を変えます。':session.followUp?.status==='improving'?'前回の確認指標は改善方向です。':'';
+ const advice=[compactFact(session,unique[0]),focus,follow,plan.action].filter(Boolean).join('\n');
+ const drills=repeat?plan.repeat[(streak-1)%2]:plan.drills;
+ const roleDrill=ROLE_DRILLS[role]??'次戦で確認する動きを一つ決める';
+ const warmup=['アップ（5分）',...(mapName?['マップ：'+mapName]:[]),
+  '2分：'+drills[0],'2分：'+drills[1],'1分：'+roleDrill].join('\n');
+ return {advice,warmup};
+}
 function shortSwing(swing:{round:number;description:string},outcome:'win'|'loss'|'draw'):string{
  if(swing.description.startsWith('人数有利から敗れた'))
   return '第'+swing.round+'ラウンド、人数有利を落とした。'+(outcome==='win'?'あれが取れていたら、もっと楽に勝てた試合です。':'勝てるラウンドを落としたのは痛い。');
@@ -234,14 +304,15 @@ function shortSwing(swing:{round:number;description:string},outcome:'win'|'loss'
 }
 export function formatPersonalFeedback(input:{
  user:string;name:string;map:string;outcome:'win'|'loss'|'draw';swing:{round:number;description:string};
- session:Session;daily:Daily;endedAt?:number;matchesToday?:number
+ session:Session;daily:Daily;endedAt?:number;matchesToday?:number;previousSessions?:readonly Session[]
 }):string|null{
  const {user,name,map,outcome,swing,session,daily}=input;
  if(!/^\d{15,22}$/.test(user))return null;
  if(!Number.isSafeInteger(swing.round)||swing.round<1||swing.round>61)return null;
  const study=daily.study;if(!study?.theme)return null;
  const pattern=selectAdvicePattern({outcome,swing,session,endedAt:input.endedAt,matchesToday:input.matchesToday});
- if(!pattern&&!daily.warmup?.title)return null;
+ const adaptive=adaptivePrescription(session,input.previousSessions);
+ if(!adaptive&&!pattern&&!daily.warmup?.title)return null;
  const metric=session.metrics.find(m=>m.key===session.lesson.track&&Number.isFinite(m.current?.value));
  // Missing metrics simply omit this paragraph. Never expose acquisition state.
  const metricLine=metric?(()=>{
@@ -250,17 +321,17 @@ export function formatPersonalFeedback(input:{
    ?metric.baseline:null;
   const title=metric.key==='kpr'?'KPR':metric.key==='dpr'?'DPR':text(metric.label,24);
   const difference=base?Number((metric.current!.value-base.value).toFixed(9)):null;
-  const evaluation=metric.key==='kpr'&&difference!==null&&difference<=-0.1?'。キルにつながる動きが減っている。'
+  const evaluation=adaptive?'。':metric.key==='kpr'&&difference!==null&&difference<=-0.1?'。キルにつながる動きが減っている。'
    :metric.key==='dpr'&&difference!==null&&difference>=0.1?'。倒されすぎだ。無理なピークを減らせ。':'。';
   return '📊 '+title+' '+current+(base?'（直近'+base.matches+'試合は'+base.value.toFixed(2)+'）':'')+evaluation;
  })():null;
- const warmup=pattern?.warmup?detailedWarmup(pattern,'')
+ const warmup=adaptive?adaptive.warmup:pattern?.warmup?detailedWarmup(pattern,'')
   :!pattern&&daily.warmup?.title?detailedWarmup(null,daily.warmup.title):null;
  const blocks=[
   '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**\n🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
   '🔎 '+shortSwing(swing,outcome),
   metricLine,
-  pattern?'💡 コーチから\n'+detailedPatternAdvice(pattern,swing)
+  adaptive?'💡 コーチから\n'+adaptive.advice:pattern?'💡 コーチから\n'+detailedPatternAdvice(pattern,swing)
    :(session.lesson.nextGame?'💡 コーチから\n次の試合では、'+text(session.lesson.nextGame,90)+'。結果だけ見て終わらず、この動きを実際に変える。':null),
   warmup?'🔥 '+warmup:null,
   '📚 座学：'+text(study.map,24)+'・'+text(study.theme,85)
@@ -325,7 +396,7 @@ export async function postCoachPersonalFeedback(env:Env,mapping:KpMapping,
  const matchesToday=report.matchFeedback.sessions.filter(s=>{
   const at=Date.parse(s.date??'');return Number.isFinite(at)&&localDay(at)===today;}).length;
  const content=formatPersonalFeedback({user:member.owner_user,name:identity.displayName,map:session.map,
-  outcome:session.outcome as 'win'|'loss'|'draw',swing,session,daily,endedAt,matchesToday});
+  outcome:session.outcome as 'win'|'loss'|'draw',swing,session,daily,endedAt,matchesToday,previousSessions:report.matchFeedback.sessions});
  if(!content||content.length>2000)return 'incomplete';
  // Verify the pre-existing webhook destination, without creating a new webhook.
  let info:{channel_id?:string;id?:string};

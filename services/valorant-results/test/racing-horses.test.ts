@@ -57,15 +57,34 @@ test('a box costs its price, makes a named horse of a drawn grade, and counts as
  assert.equal(balance(f.sql,two),0);
 });
 
-test('at most three active horses, and three exchanges a day across boxes and directives', async t => {
+test('three independent daily limits, old receipts, midnight reset and stable capacity', async t => {
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
  for(const n of [1,2])await operateKp(f.env,mapping,one,`horse-buy-op-1000${n}`,'horse-buy',{box:'normal',name:'ウマ'+n});
  await operateKp(f.env,mapping,one,'directive-op-000001','directive',{target:two,task:'competitive'});
- await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10003','horse-buy',{box:'normal',name:'ウマ3'}),/1日3回/);
- t.mock.timers.setTime(T0+24*3600000);
- await operateKp(f.env,mapping,one,'horse-buy-op-10004','horse-buy',{box:'normal',name:'ウマ3'});
+ // Simulate a pre-release wallet with two horse purchases and one directive.
+ const legacy=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ delete legacy.exchange.byCategory;
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(legacy),guild,one);
+ assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:1,horse:2,luxury:0});
+ const third=await operateKp(f.env,mapping,one,'horse-buy-op-10003','horse-buy',{box:'normal',name:'ウマ3'});
+ assert.deepEqual(await operateKp(f.env,mapping,one,'horse-buy-op-10003','horse-buy',{box:'normal',name:'ウマ3'}),third);
+ for(let n=2;n<=3;n++){
+  f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+  await operateKp(f.env,mapping,one,'directive-op-00000'+n,'directive',{target:two,task:'competitive'});
+ }
+ f.sql.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=?").run(guild,two);
+ for(let n=1;n<=3;n++)await operateKp(f.env,mapping,one,'luxury-op-000000'+n,'luxury',{item:'title',title:'KP長者'});
+ assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:3,horse:3,luxury:3});
+ const before=balance(f.sql);
+ await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10004','horse-buy',{box:'normal',name:'ウマ4'}),/1日3回/);
+ await assert.rejects(operateKp(f.env,mapping,one,'directive-op-000004','directive',{target:two,task:'competitive'}),/1日3回/);
+ await assert.rejects(operateKp(f.env,mapping,one,'luxury-op-0000004','luxury',{item:'title',title:'KP長者'}),/1日3回/);
+ assert.equal(balance(f.sql),before);
+ t.mock.timers.setTime(Date.parse('2026-10-28T00:00:00+09:00'));
  await assert.rejects(operateKp(f.env,mapping,one,'horse-buy-op-10005','horse-buy',{box:'normal',name:'ウマ4'}),/3頭まで/);
+ await operateKp(f.env,mapping,one,'directive-op-000005','directive',{target:two,task:'competitive'});
+ assert.deepEqual((await readKpState(f.env,mapping,one)).exchange.byCategory,{directive:1,horse:0,luxury:0});
  assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_horses').get()!.n),3);
 });
 

@@ -213,12 +213,29 @@ test('operations cannot double spend, reuse IDs with new inputs, set balances, o
  const result=played.result as {outcome:number;payout:number};assert.ok(Number.isInteger(result.outcome)&&result.outcome>=0&&result.outcome<=36);assert.equal(result.payout,result.outcome===3?3600:0);
  assert.equal((await readKpState(f.env,mapping,one)).cash,186+result.payout);
 });
-test('a duplicate active directive rolls back payment for all issuers and ownership cannot silently change',async()=>{
- const f=await fixture();seed(f.sql,one,50000);seed(f.sql,two,50000);
+test('two active directives per target; third rolls back across issuers; old unique index migrates safely',async()=>{
+ const f=await fixture();seed(f.sql,one,200000);seed(f.sql,two,50000);
+ const {ensureDirectiveLifecycle,completeDirectiveMatch}=await import('../src/kp-directive-lifecycle.ts');
+ f.sql.exec("DROP TRIGGER kp_directive_cap_insert; DROP TRIGGER kp_directive_cap_update; CREATE UNIQUE INDEX kp_directive_active ON kp_directives(guild,target) WHERE status='active'; DELETE FROM kp_settings WHERE key='directive_active_limit_version'");
  await operateKp(f.env,mapping,one,'first-directive-001','directive',{target:two,task:'competitive'});
+ const prior=f.sql.prepare('SELECT * FROM kp_directives').all();
+ await ensureDirectiveLifecycle({...f.env,DB:{...f.env.DB} as D1Database});
+ assert.deepEqual(f.sql.prepare('SELECT * FROM kp_directives').all(),prior);
+ assert.equal(f.sql.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='kp_directive_active'").get(),undefined);
+ await operateKp(f.env,mapping,one,'second-directive-01','directive',{target:two,task:'competitive'});
  const before=(await readKpState(f.env,mapping,one)).cash;
- await assert.rejects(operateKp(f.env,mapping,one,'second-directive-01','directive',{target:two,task:'competitive'}));
+ await assert.rejects(operateKp(f.env,mapping,one,'third-directive-001','directive',{target:two,task:'competitive'}),/kp_directive_active_limit/);
  assert.equal((await readKpState(f.env,mapping,one)).cash,before);
+ const third='100000000000000103';
+ assert.throws(()=>f.sql.prepare("INSERT INTO kp_directives(id,guild,issuer,target,task,game,achievement,cost,at) VALUES('third-direct',?,?,?,'competitive','','',40000,?)").run(guild,third,two,Date.now()),/kp_directive_active_limit/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_directives WHERE status='active'").get()!.n,2);
+ // Preserve the per-directive fulfillment rule: the same qualifying match may satisfy
+ // both independent orders, each receives at most one completion and early bonus.
+ const at=Date.now();
+ await completeDirectiveMatch(f.env,mapping,two,'competitive',at+1,at+1000,'two-active-match');
+ await completeDirectiveMatch(f.env,mapping,two,'competitive',at+1,at+1000,'two-active-match');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_directives WHERE status='completed'").get()!.n,2);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) n FROM kp_ledger WHERE kind='directive-early'").get()!.n,2000);
  await assert.rejects(operateKp(f.env,mapping,two,'self-directive-001','directive',{target:two,task:'competitive'}),/相手/);
  assert.throws(()=>f.sql.prepare('UPDATE kp_accounts SET user=? WHERE puuid=?').run(two,'p-one'));
 });

@@ -7,6 +7,7 @@ import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
 import { ensureHorses } from '../src/racing-horses.ts';
+import { luxuryPosts, luxuryRoastText } from '../src/luxury.ts';
 import { resultPost } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -89,4 +90,73 @@ test('statues are for your own retired horse, once; the billboard lasts a week; 
  assert.equal((await readKpState(f.env,mapping,two)).luxury.billboard,null);
  await assert.rejects(operateKp(f.env,mapping,two,op(),'luxury',{item:'title',title:'養分'}),/KPが足りません/);
  await assert.rejects(buy(f,{item:'yacht'}),/品目を選んで/);
+});
+
+test('luxury roast decks contain 320 distinct full-tone lines and respect Discord length',()=>{
+ const seen=new Set<string>();
+ for(let i=0;i<20;i++){
+  const full=luxuryRoastText('full',i,two,one),normal=luxuryRoastText('normal',i,two,one);
+  const lines=full.split('\n').filter(line=>line.startsWith('・'));
+  assert.equal(lines.length,16);
+  assert.equal(normal.split('\n').filter(line=>line.startsWith('・')).length,3);
+  assert.ok(full.length<=2000);
+  assert.ok(normal.length<=2000);
+  for(const line of lines){assert.ok(!seen.has(line),line);seen.add(line);}
+ }
+ assert.equal(seen.size,320);
+ assert.equal(luxuryRoastText('full',0,two,one),luxuryRoastText('full',20,two,one));
+});
+test('successive roast purchases use disjoint decks; retry does not advance sequence',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ await operateKp(f.env,mapping,two,'roast-level-op-9010','roast-level',{level:'full'});
+ await buy(f,{item:'roast-post',target:two});
+ await buy(f,{item:'roast-post',target:two});
+ const rows=f.sql.prepare('SELECT id,seq FROM kp_luxury_roast_order ORDER BY seq').all() as Array<{id:string;seq:number}>;
+ assert.deepEqual(rows.map(r=>r.seq),[0,1]);
+ const messages=posts(f.sql);
+ assert.equal(messages.length,2);
+ const first=new Set(messages[0]!.split('\n').filter(l=>l.startsWith('・')));
+ assert.ok(messages[1]!.split('\n').filter(l=>l.startsWith('・')).every(l=>!first.has(l)));
+ await luxuryPosts(f.env,mapping,one,{id:rows[0]!.id,item:'roast-post',target:two,payload:null},T0);
+ assert.equal(posts(f.sql).length,2);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_luxury_roast_order').get()!.n,2);
+ await operateKp(f.env,mapping,two,'roast-level-op-9011','roast-level',{level:'mild'});
+ await assert.rejects(buy(f,{item:'roast-post',target:two}),/控えめ/);
+});
+
+test('full roast has a unique dramatic opening and three-line bot finale for each deck',()=>{
+ const openings=new Set<string>(),finales=new Set<string>();
+ for(let i=0;i<20;i++){
+  const full=luxuryRoastText('full',i,two,one),normal=luxuryRoastText('normal',i,two,one);
+  const parts=full.split('\n'), marker=parts.indexOf('**【等しいbotからのお知らせ】**');
+  assert.ok(marker>0);
+  const opening=parts[4]!, closing=parts.slice(marker+2,marker+5);
+  assert.equal(closing.length,3);
+  assert.match(closing[0]!,/30,000KP/);
+  assert.equal(parts.at(-1),`提供：<@${one}>`);
+  assert.ok(!openings.has(opening));openings.add(opening);
+  for(const line of closing){assert.ok(!finales.has(line));finales.add(line);}
+  assert.ok(!normal.includes('等しいbotからのお知らせ'));
+  assert.ok(full.length<=2000);
+ }
+ assert.equal(openings.size,20);assert.equal(finales.size,60);
+ assert.match(luxuryRoastText('full',0,two,one),/勝率改善に使われた予算は0KP/);
+ assert.match(luxuryRoastText('full',0,two,one),/ほな、また負けたときにお会いしましょうwwwwww/);
+});
+
+test('full roast adds unique report and counterpunch lines, normal stays unchanged',()=>{
+ const seen=new Set<string>();
+ for(let i=0;i<20;i++){
+  const full=luxuryRoastText('full',i,two,one),normal=luxuryRoastText('normal',i,two,one);
+  const parts=full.split('\n'),marker=parts.indexOf('🎙️ **等しいbotの追撃**');
+  assert.ok(marker>0);
+  for(const line of [parts[6]!,parts[7]!,parts[marker+1]!,parts[marker+2]!]){
+   assert.ok(line.length>0&&!seen.has(line));seen.add(line);
+   assert.ok(!normal.includes(line));
+  }
+  assert.ok(full.length<=2000);
+  assert.ok(!normal.includes('等しいbotの追撃'));
+ }
+ assert.equal(seen.size,80);
 });

@@ -12,9 +12,14 @@ test('Steam achievements require game, achievement and evidence; duplicate title
  const c=submitClaim(s,{activity:'steam',game:'Portal 2',achievement:'Wake Up',reference:'proof'});approveClaim(s,c.id);assert.equal(s.cash,10800);
  assert.throws(()=>submitClaim(s,{activity:'steam',game:'portal 2',achievement:' wake up ',reference:'other proof'}));
 });
-test('directives charge once, require a target, prevent stacking, and completion does not refund',()=>{
- const s=createInitialState();s.cash=50_000;assert.throws(()=>issueDirective(s,{target:'self',task:'competitive'}));
- const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,10000,'competitive costs 40,000');assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}));completeDirective(s,d.id);assert.equal(s.cash,10000);assert.throws(()=>completeDirective(s,d.id));assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}),/不足/,'10,000 left is short of the 12,500 unrated price');
+test('directives charge once, require a target, allow two active orders, and completion does not refund',()=>{
+ const s=createInitialState();s.cash=65_000;assert.throws(()=>issueDirective(s,{target:'self',task:'competitive'}));
+ const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,25000,'competitive costs 40,000');
+ issueDirective(s,{target:'riso',task:'unrated'});assert.equal(s.cash,12500);
+ assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}),/2件/);
+ assert.equal(hydrateState(s).directives.filter(x=>x.status==='active').length,2);
+ completeDirective(s,d.id);assert.equal(s.cash,12500);assert.throws(()=>completeDirective(s,d.id));
+ issueDirective(s,{target:'riso',task:'unrated'});assert.equal(s.cash,0);
 });
 test('missing achievement details and insufficient balance never debit',()=>{
  const s=createInitialState();assert.throws(()=>issueDirective(s,{target:'yuya',task:'steam'}));s.cash=100;const before=structuredClone(s);assert.throws(()=>issueDirective(s,{target:'yuya',task:'competitive'}));assert.deepEqual(s,before);

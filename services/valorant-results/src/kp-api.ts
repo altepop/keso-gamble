@@ -60,7 +60,7 @@ import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { hydrateRacing, placeRaceBet, useExchange, raceCard, raceOdds, raceResult } from '../../../js/racing.js';
+import { hydrateRacing, placeRaceBet, useExchange, exchangeDay, raceCard, raceOdds, raceResult } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
 import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from '../../../js/casino.js';
 // @ts-expect-error Shared pure browser module.
@@ -95,11 +95,29 @@ export async function kpPulse(env:KpEnv,guild:string,user:string,now=Date.now())
  if(!row)throw Error('口座が見つかりません。');
  return `${row.w}.${row.s}.${row.d}.${row.debt??0}.${row.m??0}.${Math.floor(now/STOCK_INTERVAL)}`;
 }
+/** Read-only compatibility for wallets with today's legacy shared counter.
+ * Receipts identify committed purchases (including voucher-funded horses).
+ * No history query for migrated wallets or an earlier JST date. */
+async function restoreLegacyExchange(env:KpEnv,guild:string,user:string,state:any,now:number){
+ const old=state.exchange,day=exchangeDay(now);
+ if(!old||old.day!==day||old.byCategory||!Number.isSafeInteger(old.count)||old.count<1||old.count>3)return;
+ const start=Date.parse(day+'T00:00:00+09:00');
+ const rows=(await env.DB.prepare(`SELECT CASE WHEN directive IS NOT NULL THEN 'directive'
+ WHEN json_type(response,'$.result.horse')='object' THEN 'horse'
+ WHEN json_type(response,'$.result.luxury')='object' THEN 'luxury' END AS category
+ FROM kp_operations WHERE guild=? AND user=? AND at>=? AND at<?
+ AND (directive IS NOT NULL OR json_type(response,'$.result.horse')='object' OR json_type(response,'$.result.luxury')='object') LIMIT 4`)
+ .bind(guild,user,start,start+86400000).all<{category:'directive'|'horse'|'luxury'}>()).results;
+ if(rows.length!==old.count)return; // incomplete evidence: preserve the legacy cap rather than reset it
+ const byCategory={directive:0,horse:0,luxury:0};
+ for(const row of rows){if(!Object.hasOwn(byCategory,row.category))return;byCategory[row.category]++;}
+ state.exchange={day,count:old.count,byCategory};
+}
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];const members=await kpTargetMembers(env,mapping);state.luxury=await luxuryView(env,mapping,user,Date.now(),new Map(members.map(m=>[m.id,m.name])));for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ const state=JSON.parse(row.data);await restoreLegacyExchange(env,mapping.guildId,user,state,Date.now());state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];const members=await kpTargetMembers(env,mapping);state.luxury=await luxuryView(env,mapping,user,Date.now(),new Map(members.map(m=>[m.id,m.name])));for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  // Immutable match/quiz/ledger history is cached across an isolate only
  // while kp_wallets.version is unchanged. Recalculate day-specific counters
  // below on every request to handle midnight without a D1 history scan.
@@ -217,7 +235,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
-   useExchange(state,Date.now()); // directives, boxes and luxury items share the daily limit
+   useExchange(state,Date.now(),'directive');
    const game=task==='steam'?String(args.game??'').trim():'',achievement=task==='steam'?String(args.achievement??'').trim():'';
    if(task==='steam'&&(!game||!achievement||game.length>80||achievement.length>120))throw Error('ゲームと実績を入力してください。');
    directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true,discount};
@@ -233,11 +251,11 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    if(args.odds!==undefined&&args.odds!==bet.odds)throw Error(`倍率が ${(Number(args.odds)/10).toFixed(1)}倍 から ${(bet.odds/10).toFixed(1)}倍 に変わったから買うてへんで。もう一度 /mbet で確かめてな。`);
    result={bet};
   }else if(action==='horse-buy'){
-   useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);
+   useExchange(state,Date.now(),'horse');result=await buyHorse(env,mapping,user,state,args);
   }else if(action==='horse-sell'){
    result=await sellHorse(env,mapping,user,state,args);
   }else if(action==='luxury'){
-   useExchange(state,Date.now());result=await buyLuxury(env,mapping,user,state,args,Date.now(),state.stockBenefits.percent);
+   useExchange(state,Date.now(),'luxury');result=await buyLuxury(env,mapping,user,state,args,Date.now(),state.stockBenefits.percent);
   }else if(action==='gift'){
    const to=String(args.to??'');await ensureGift(env);
    result=applyGift(state,user,args,id=>id===to&&knownGiftTarget);
@@ -753,6 +771,6 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。診断コード：COACH_'+safeStep,code:'COACH_'+safeStep},503);
   }
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手の未達成指令は2件までです。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }
