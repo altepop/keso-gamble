@@ -36,6 +36,7 @@ on:
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
+      - 'scripts/ci-browser-lanes.mjs'
       - 'scripts/race-video/**'
       - '.github/workflows/race-video.yml'
   push:
@@ -65,6 +66,7 @@ on:
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
+      - 'scripts/ci-browser-lanes.mjs'
       - 'scripts/race-video/**'
       - '.github/workflows/race-video.yml'
   workflow_dispatch:
@@ -217,7 +219,8 @@ jobs:
         run: |
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
-      - run: npm run test:browser:${{ matrix.suite }}
+      - name: Run every browser case in two bounded parallel lanes
+        run: node scripts/ci-browser-lanes.mjs ${{ matrix.suite }}
         env:
           COACH_V6_SCREENSHOTS_DIR: ${{ runner.temp }}/coach-v6-comparison
           COACH_JAPANESE_AUDIT: ${{ runner.temp }}/coach-v6-comparison/japanese.json
