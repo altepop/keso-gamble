@@ -7,7 +7,10 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 start=$SECONDS
-timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh &
+# Keep video variables out of all earlier test steps, including the mocked encoder.
+video_env="${RUNNER_TEMP:?}/keso-video-prepare.env"
+: > "$video_env"
+GITHUB_ENV="$video_env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh &
 prep_pid=$!
 trap 'kill "$prep_pid" 2>/dev/null || true' EXIT
 if (cd services/valorant-results && npm run check); then check_status=0; else check_status=$?; fi
