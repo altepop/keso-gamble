@@ -99,3 +99,27 @@
  #keso-music .music-panel{top:8px;bottom:8px}
 }
 @media(prefers-reduced-motion:reduce){#keso-music *{scroll-behavior:auto!important;transition:none!important}}
+
+/* Optional local musical motifs; visual only, never part of a game draw. */
+#app:has(#keso-music .music-open.playing) .slot-arena {
+ --slot-motif:" · ♫";
+ --slot-motif-color:#83d6cf;
+}
+#app:has(#keso-music .music-open.playing):has(#music-song-kyohansha[aria-current="true"]) .slot-arena {
+ --slot-motif:" · 02:00"; --slot-motif-color:#b9a7ff;
+}
+#app:has(#keso-music .music-open.playing):has(#music-song-relic[aria-current="true"]) .slot-arena {
+ --slot-motif:" · 𓂀"; --slot-motif-color:#f5c77e;
+}
+#app:has(#keso-music .music-open.playing):has(#music-song-fullpa[aria-current="true"]) .slot-arena {
+ --slot-motif:" · ⚡"; --slot-motif-color:#a1e4ff;
+}
+#app:has(#keso-music .music-open.playing):has(#music-song-makekowa[aria-current="true"]) .slot-arena {
+ --slot-motif:" · 🔥"; --slot-motif-color:#ff9f92;
+}
+#app:has(#keso-music .music-open.playing) .slot-arena .slot-marquee small::after {
+ content:var(--slot-motif); color:var(--slot-motif-color);
+}
+#app:has(#keso-music .music-open.playing) .slot-arena .slot-machine {
+ outline:1px solid var(--slot-motif-color); outline-offset:-2px;
+}
