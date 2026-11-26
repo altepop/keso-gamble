@@ -60,3 +60,50 @@ test('rejects inconsistent totals and malformed configuration',async()=>{
    }]}]})})),/Inconsistent archive counts/);
  }finally{f.cleanup()}
 });
+
+test('archive audit joins indexed flags once and preserves every aggregate on identical fixture',async()=>{
+ const {DatabaseSync}=await import('node:sqlite');
+ const f=fixture(),db=new DatabaseSync(':memory:');
+ try{
+  db.exec("CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,ended_at INTEGER,players_json TEXT); CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT); CREATE TABLE tracked_players(riot_id TEXT PRIMARY KEY,puuid TEXT,region TEXT); CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT); INSERT INTO tracked_players VALUES('Dolly#SDGs','p0','ap'); INSERT INTO monitor_state VALUES('coach_round_backfill:enabled','repaired')");
+  const roster=db.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?)'),round=db.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)'),state=db.prepare('INSERT INTO monitor_state VALUES(?,?)');
+  for(let i=0;i<1000;i++){
+   const id=String(i);
+   roster.run(id,i,JSON.stringify(Array.from({length:10},(_,j)=>({name:j===0&&i%4?'Dolly':'other'+j,tag:j===0?'SDGs':'JP1',puuid:i%3?'p0':'old'}))));
+   if(i%7)round.run(id,i%5?'[]':null,i%6?'[]':null);
+   if(i%6===0)state.run('coach_round_backfill:unavailable:'+id,['missing_kills','missing_rounds','404','no_round_data'][i%4]);
+   if(i%9===0)state.run('coach_round_backfill:retry_once:'+id,'1');
+   if(i%18===0)state.run('coach_round_backfill:legacy_v2_once:'+id,'1');
+  }
+  const oldSql="WITH targets AS (\n   SELECT r.match_id,r.ended_at,e.match_id AS archived,\n    e.rounds_json,e.kills_json,\n    EXISTS(SELECT 1 FROM json_each(r.players_json) p\n     JOIN tracked_players t ON lower(t.riot_id)='dolly#sdgs'\n     WHERE json_extract(p.value,'$.name')='Dolly'\n       AND json_extract(p.value,'$.tag')='SDGs'\n       AND json_extract(p.value,'$.puuid')=t.puuid) AS current_puuid_match,\n    (SELECT value FROM monitor_state s\n     WHERE s.key='coach_round_backfill:unavailable:'||r.match_id) AS unavailable_reason,\n    EXISTS(SELECT 1 FROM monitor_state s\n     WHERE s.key='coach_round_backfill:retry_once:'||r.match_id) AS retry_attempted,\n    EXISTS(SELECT 1 FROM monitor_state s\n     WHERE s.key='coach_round_backfill:legacy_v2_once:'||r.match_id) AS legacy_v2_attempted\n   FROM valorant_match_rosters r\n   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id\n   WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p\n    WHERE json_extract(p.value,'$.name')='Dolly'\n      AND json_extract(p.value,'$.tag')='SDGs')\n )\n SELECT COUNT(*) AS roster_count,\n   COALESCE(SUM(CASE WHEN rounds_json IS NOT NULL AND kills_json IS NOT NULL THEN 1 ELSE 0 END),0) AS complete_count,\n   COALESCE(SUM(CASE WHEN archived IS NULL THEN 1 ELSE 0 END),0) AS missing_count,\n   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND (rounds_json IS NULL OR kills_json IS NULL) THEN 1 ELSE 0 END),0) AS partial_count,\n   COALESCE(SUM(CASE WHEN unavailable_reason IS NOT NULL THEN 1 ELSE 0 END),0) AS unavailable_count,\n   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND rounds_json IS NOT NULL\n      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS missing_kills_only,\n   COALESCE(SUM(CASE WHEN archived IS NOT NULL AND rounds_json IS NULL\n      AND kills_json IS NOT NULL THEN 1 ELSE 0 END),0) AS missing_rounds_only,\n   COALESCE(SUM(CASE WHEN unavailable_reason='missing_kills' THEN 1 ELSE 0 END),0) AS reason_missing_kills,\n   COALESCE(SUM(CASE WHEN unavailable_reason='missing_rounds' THEN 1 ELSE 0 END),0) AS reason_missing_rounds,\n   COALESCE(SUM(CASE WHEN unavailable_reason='no_round_data' THEN 1 ELSE 0 END),0) AS reason_no_round_data,\n   COALESCE(SUM(CASE WHEN unavailable_reason='404' THEN 1 ELSE 0 END),0) AS reason_not_found,\n   COALESCE(SUM(CASE WHEN retry_attempted=1 THEN 1 ELSE 0 END),0) AS retry_attempts,\n   COALESCE(SUM(CASE WHEN retry_attempted=1 AND rounds_json IS NOT NULL\n      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS retry_still_missing_kills,\n   COALESCE(SUM(CASE WHEN legacy_v2_attempted=1 THEN 1 ELSE 0 END),0) AS legacy_v2_attempts,\n   COALESCE(SUM(CASE WHEN legacy_v2_attempted=1 AND rounds_json IS NOT NULL\n      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS legacy_v2_still_missing_kills,\n   COALESCE(SUM(CASE WHEN current_puuid_match=0 THEN 1 ELSE 0 END),0) AS historical_puuid_mismatch,\n   COALESCE(SUM(CASE WHEN (rounds_json IS NULL OR kills_json IS NULL)\n     AND unavailable_reason IS NULL AND ended_at<100000\n     THEN 1 ELSE 0 END),0) AS eligible_backlog,\n   (SELECT value FROM monitor_state WHERE key='coach_round_backfill:enabled') AS switch_value,\n   (SELECT value FROM monitor_state WHERE key='api_after') AS api_cooldown_until,\n   (SELECT COUNT(*) FROM tracked_players WHERE lower(riot_id)='dolly#sdgs' AND length(region)>0) AS tracked_profile_exists\n FROM targets";
+  let nextSql='';
+  // Capture the actual SQL from the existing API function, no network.
+  await auditCoachArchive(f.dir,{CLOUDFLARE_API_TOKEN:token,CLOUDFLARE_ACCOUNT_ID:account},async(_url,opts)=>{
+   nextSql=JSON.parse(opts.body).sql;
+   return {ok:true,json:async()=>({success:true,result:[{success:true,results:[db.prepare(nextSql).get()]}]})};
+  },220000);
+  assert.deepEqual(db.prepare(nextSql).get(),db.prepare(oldSql).get());
+  const plan=db.prepare('EXPLAIN QUERY PLAN '+nextSql).all().map(r=>r.detail).join(' | ');
+  assert.doesNotMatch(plan,/MATERIALIZE targets/);
+  for(const alias of ['unavailable','retry','legacy'])assert.match(plan,new RegExp('SEARCH '+alias+' USING .*\\(key=\\?\\)'));
+  console.log('ARCHIVE_AUDIT_PLAN '+plan);
+  const {Miniflare}=await import('miniflare');
+  const runtime=new Miniflare({workers:[{config:{name:'archive-read-test',compatibilityDate:'2026-10-24',env:{DB:{type:'d1'}},manifest:{mainModule:'worker.mjs',modules:{'worker.mjs':{type:'esm',contents:'export default {fetch(){return new Response("ok")}}'}}}}}]});
+  try{
+   const d1=await runtime.getD1Database('DB','archive-read-test');
+   for(const table of ['valorant_match_rosters','valorant_match_round_events','tracked_players','monitor_state']){
+    const ddl=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table).sql;
+    await d1.prepare(ddl).run();
+    const rows=db.prepare('SELECT * FROM '+table).all();
+    for(let i=0;i<rows.length;i+=50)await d1.batch(rows.slice(i,i+50).map(row=>{
+     const values=Object.values(row);return d1.prepare('INSERT INTO '+table+' VALUES('+values.map(()=>'?').join(',')+')').bind(...values);
+    }));
+   }
+   const before=await d1.prepare(oldSql).all(),after=await d1.prepare(nextSql).all();
+   assert.deepEqual(after.results,before.results);
+   console.log('ARCHIVE_AUDIT_D1_ROWS '+JSON.stringify({before:before.meta.rows_read,after:after.meta.rows_read}));
+   assert.ok(after.meta.rows_read<before.meta.rows_read,'same-fixture D1 read count must improve');
+  }finally{await runtime.dispose();}
+
+ }finally{db.close();f.cleanup();}
+});
