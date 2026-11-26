@@ -123,8 +123,13 @@ test('issue #522: batch fresh cross-cron receipts cut joined calls without hidin
  assert.equal(legacy.credits.has(ids[3]),first.credits.has(ids[3]));
  // SQLite EXPLAIN on the *executed* batch query, not an assumed index name.
  const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+calls[0]).all(...ids,guild) as {detail:string}[];
- assert.ok(plan.some(row=>/SEARCH e USING (?:COVERING )?INDEX|SEARCH e USING INTEGER PRIMARY KEY/.test(row.detail)),
-  'batch must use an indexed kp_events lookup rather than a table scan');
+ assert.ok(plan.some(row=>/SEARCH e USING (?:COVERING )?INDEX .*\(id=\?\)/.test(row.detail)),
+  'batch must seek the event id, not scan every event in the guild: '+JSON.stringify(plan));
+ const oldSql=calls[0].replace('AND +e.guild=?','AND e.guild=?');
+ assert.notEqual(oldSql,calls[0]);
+ assert.deepEqual(f.sql.prepare(oldSql).all(...ids,guild).sort((a,b)=>String(a.event_id).localeCompare(String(b.event_id))),f.sql.prepare(calls[0]).all(...ids,guild).sort((a,b)=>String(a.event_id).localeCompare(String(b.event_id))));
+ assert.deepEqual(f.sql.prepare(calls[0]).all(...ids,'wrong-guild'),[]);
+ console.log('KP_BATCH_EXPLAIN '+JSON.stringify({old:f.sql.prepare('EXPLAIN QUERY PLAN '+oldSql).all(...ids,guild),next:plan}));
  // Measured: 4 -> 1 joined calls. SQLite fixture does not expose D1 rows_read.
  // Keep that metric explicitly unmeasured until D1 Insights can compare it.
  assert.equal(calls.length,1,'four indexed receipts share one SQL call');
