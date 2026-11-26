@@ -23,3 +23,16 @@ export async function ensureNotificationReadIndexes(db:D1Database):Promise<void>
  ready.set(db,job);
  try{await job;}catch(e){ready.delete(db);throw e;}
 }
+
+/** Only skip a match when every relevant participant's receipt is already
+ * positively known in this monitor run. Missing keys are never cached:
+ * any later page with a new participant still performs the original all-member
+ * read, including late receipts. No change to saveMatch or delivery semantics. */
+export async function prefetchMissingMatchNotices(db:D1Database,candidates:readonly {matchId:string;riotIds:readonly string[]}[],saved:Set<string>){
+ const ids=[...new Set(candidates.filter(c=>!c.riotIds.length||
+  c.riotIds.some(riot=>!saved.has(JSON.stringify([riot,c.matchId])))).map(c=>c.matchId))];
+ if(!ids.length)return;
+ const rows=await db.prepare(`SELECT riot_id,match_id FROM notifications WHERE match_id IN (${ids.map(()=>'?').join(',')})`)
+  .bind(...ids).all<{riot_id:string;match_id:string}>();
+ for(const r of rows.results)saved.add(JSON.stringify([r.riot_id,r.match_id]));
+}
