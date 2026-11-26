@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GitHub runner only. No Discord or application credentials are read here.
 set -euo pipefail
-ms(){ date +%s%3N; }
+ms(){ python3 -c 'import time;print(time.monotonic_ns()//1000000)'; }
 begin=$(ms)
 pip_preinstalled=0
 if test -x "$RUNNER_TEMP/video-python/bin/pip" && "$RUNNER_TEMP/video-python/bin/pip" show Pillow >/dev/null 2>&1; then pip_preinstalled=1; fi
@@ -24,7 +24,7 @@ font_ms=$(ms)
 pip_cache_after=0
 if test -d "$pip_cache_dir"; then pip_cache_after=$(du -sk "$pip_cache_dir" 2>/dev/null | awk '{print $1}'); fi
 font_bytes=$(wc -c < "$RUNNER_TEMP/race-font.otf")
-printf 'CI_VIDEO_PREP_PHASE venv_ms=%s pip_ms=%s ffmpeg_ms=%s font_ms=%s total_ms=%s pip_preinstalled=%s pip_cache_before_kib=%s pip_cache_after_kib=%s font_preexisting=%s font_http=%s font_bytes=%s font_cache_hit=0\\n' \
+printf 'CI_VIDEO_PREP_PHASE venv_ms=%s pip_ms=%s ffmpeg_ms=%s font_ms=%s total_ms=%s pip_preinstalled=%s pip_cache_before_kib=%s pip_cache_after_kib=%s font_preexisting=%s font_http=%s font_bytes=%s font_cache_hit=0\n' \
  "$((venv_ms-begin))" "$((pip_ms-venv_ms))" "$((ffmpeg_ms-pip_ms))" "$((font_ms-ffmpeg_ms))" "$((font_ms-begin))" \
  "$pip_preinstalled" "$pip_cache_before" "$pip_cache_after" "$font_preexisting" "$font_http" "$font_bytes"
 # This path always calls curl with no conditional cache, so font_cache_hit=0.
