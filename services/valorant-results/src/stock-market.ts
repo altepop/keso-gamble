@@ -31,6 +31,21 @@ export function godoEventQuote(before:number,normal:number,initial:number,begin:
  const adjustment=Math.max(-limit,Math.min(limit,Math.round((reference-normal)*0.22)));
  return Math.max(20,Math.min(10000000,normal+adjustment));
 }
+// Continue the first phase without moving its original milestone. Anchor phase 2
+// to the actual first quote after Nov 28; do not reset any existing holdings.
+export const GODO_CHRISTMAS_END=Date.UTC(2026,11,25,15); // Dec 26 00:00 JST
+export function godoChristmasQuote(before:number,normal:number,initial:number,begin:number,now:number):number{
+ if(now<begin||now<GODO_EVENT_END||now>=GODO_CHRISTMAS_END)return normal;
+ const finish=GODO_CHRISTMAS_END-GODO_FINAL_WINDOW;
+ if(now>=finish)return Math.max(20000,Math.min(20200,normal));
+ const p=Math.max(0,Math.min(1,(now-begin)/Math.max(1,finish-begin)));
+ const trend=initial+(20000-initial)*p;
+ // Six multi-day waves with pullbacks, plus normal market noise and news.
+ const reference=trend*(1+0.085*Math.sin(12*Math.PI*p)*Math.sin(Math.PI*p));
+ const limit=Math.max(1,Math.round(before*0.0035));
+ const adjustment=Math.max(-limit,Math.min(limit,Math.round((reference-normal)*0.12)));
+ return Math.max(20,Math.min(10000000,normal+adjustment));
+}
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
@@ -94,6 +109,7 @@ export async function ensureStocks(env:KpEnv){
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_vdk_bankruptcy(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_godo_event_20261125(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
+ `CREATE TABLE IF NOT EXISTS stock_godo_event_20261225(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
  STOCK_ANNOUNCEMENT_LAST_INDEX_SQL,
@@ -265,9 +281,12 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw);
- const godoActive=market.guild===GODO_EVENT_GUILD&&now>=GODO_EVENT_START&&now<GODO_EVENT_END;
- const godoStart=godoActive?await env.DB.prepare('SELECT begin_at,start_price FROM stock_godo_event_20261125 WHERE guild=?').bind(market.guild).first<{begin_at:number;start_price:number}>():null;
- if(godoActive)prices.godo=godoEventQuote(market.prices.godo,prices.godo,godoStart?.start_price??market.prices.godo,godoStart?.begin_at??now,now);
+ const godoActive=market.guild===GODO_EVENT_GUILD&&now>=GODO_EVENT_START&&now<GODO_CHRISTMAS_END;
+ const godoPhase2=now>=GODO_EVENT_END;
+ // The table name is selected from two internal constants, never client input.
+ const godoTable=godoPhase2?'stock_godo_event_20261225':'stock_godo_event_20261125';
+ const godoStart=godoActive?await env.DB.prepare(`SELECT begin_at,start_price FROM ${godoTable} WHERE guild=?`).bind(market.guild).first<{begin_at:number;start_price:number}>():null;
+ if(godoActive)prices.godo=(godoPhase2?godoChristmasQuote:godoEventQuote)(market.prices.godo,prices.godo,godoStart?.start_price??market.prices.godo,godoStart?.begin_at??now,now);
  // Remember the real starting quote from the first active 5-minute tick.
  if(now>=VDK_CRASH_START){
   await env.DB.prepare('INSERT OR IGNORE INTO stock_vdk_bankruptcy(guild,begin_at,start_price) VALUES(?,?,?)')
@@ -281,7 +300,7 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  const token=crypto.randomUUID(),version=market.version+1,guard='EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)';
  const commands=[env.DB.prepare('UPDATE stock_markets SET version=?,prices=?,history=?,at=?,token=? WHERE guild=? AND version=?').bind(version,JSON.stringify(prices),JSON.stringify(history),now,token,market.guild,market.version),
   env.DB.prepare(`INSERT OR IGNORE INTO stock_ticks SELECT ?,?,?,? WHERE ${guard}`).bind(market.guild,version,JSON.stringify(prices),now,market.guild,token)];
- if(godoActive&&!godoStart)commands.push(env.DB.prepare(`INSERT OR IGNORE INTO stock_godo_event_20261125(guild,begin_at,start_price) SELECT ?,?,? WHERE ${guard}`).bind(market.guild,now,market.prices.godo,market.guild,token));
+ if(godoActive&&!godoStart)commands.push(env.DB.prepare(`INSERT OR IGNORE INTO ${godoTable}(guild,begin_at,start_price) SELECT ?,?,? WHERE ${guard}`).bind(market.guild,now,market.prices.godo,market.guild,token));
  if(now>=VDK_IPO_AT){
   const announcement=JSON.stringify({content:'📉 **【速報】VDKブラック商事、ついに倒産！**\n株価1 KPで上場廃止。旧VDK株の売買は終了。\n🏢 **VDKブラックコンサル（VDKC）新規上場！** 初値500 KP。旧株とは別銘柄として再出発。',allowed_mentions:{parse:[]}});
   commands.push(env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)")

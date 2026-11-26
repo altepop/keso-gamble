@@ -6,7 +6,7 @@ import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState,kpPulse} from '../src/kp-api.ts';
-import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,raceNewsSince,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews,godoEventQuote,GODO_EVENT_GUILD,GODO_EVENT_START,GODO_EVENT_END,STOCK_INTERVAL} from '../src/stock-market.ts';
+import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,raceNewsSince,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews,godoEventQuote,GODO_EVENT_GUILD,GODO_EVENT_START,GODO_EVENT_END,STOCK_INTERVAL,godoChristmasQuote,GODO_CHRISTMAS_END} from '../src/stock-market.ts';
 import {applyStockShock,stockShockPrice} from '../src/stock-admin.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -549,7 +549,7 @@ test('GODO 3-day event climbs with pullbacks and releases at its fixed deadline'
  assert.equal(godoEventQuote(price,9200,initial,begin,GODO_EVENT_START-1),9200);
 });
 
-test('GODO event captures its actual starting quote, affects only its guild and expires',async t=>{
+test('GODO first phase captures its actual starting quote and affects only its guild',async t=>{
  t.mock.timers.enable({apis:['Date'],now:GODO_EVENT_START});const f=await fixture();
  let m=await prepareStocks(f.env,GODO_EVENT_GUILD),other=await prepareStocks(f.env,guild);
  f.sql.prepare("UPDATE stock_markets SET prices=json_set(prices,'$.godo',6200) WHERE guild=?").run(GODO_EVENT_GUILD);
@@ -562,6 +562,31 @@ test('GODO event captures its actual starting quote, affects only its guild and 
  const final=GODO_EVENT_END-STOCK_INTERVAL;
  m=await tickStocks(f.env,m,final,()=>.5);other=await tickStocks(f.env,other,final,()=>.5);
  assert.equal(m.prices.godo,10000);assert.equal(other.prices.godo,1450);
- const expired=await tickStocks(f.env,m,GODO_EVENT_END,()=>.49);
- assert.ok(expired.prices.godo<10000,'normal market is restored immediately at deadline');
+ const phase2=await tickStocks(f.env,m,GODO_EVENT_END,()=>.5);
+ assert.equal(phase2.prices.godo,10000,'second phase starts without resetting the quote');
+ assert.deepEqual({...f.sql.prepare('SELECT begin_at,start_price FROM stock_godo_event_20261225 WHERE guild=?').get(GODO_EVENT_GUILD)},{begin_at:GODO_EVENT_END,start_price:10000});
+ const christmasFinal=GODO_CHRISTMAS_END-STOCK_INTERVAL;
+ const target=await tickStocks(f.env,phase2,christmasFinal,()=>.5);
+ assert.equal(target.prices.godo,20000);
+ const outside=await tickStocks(f.env,other,christmasFinal,()=>.5);
+ assert.equal(outside.prices.godo,1450);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_godo_event_20261225').get()!.n,1);
+ const expired=await tickStocks(f.env,target,GODO_CHRISTMAS_END,()=>.49);
+ assert.ok(expired.prices.godo<20000,'normal market is restored immediately at Christmas deadline');
+});
+
+
+test('GODO Christmas phase includes pullbacks, bounded nudges and automatic release',()=>{
+ const begin=GODO_EVENT_END,initial=10500;
+ let price=initial,up=0,down=0;
+ for(let at=begin;at<GODO_CHRISTMAS_END;at+=STOCK_INTERVAL){
+  const next=godoChristmasQuote(price,price,initial,begin,at);
+  if(next>price)up++;if(next<price)down++;
+  if(at<GODO_CHRISTMAS_END-60*60_000)assert.ok(Math.abs(next-price)<=Math.max(1,Math.round(price*.0035)));
+  price=next;
+ }
+ assert.ok(up>0&&down>0);
+ assert.ok(price>=20000&&price<=20200);
+ assert.equal(godoChristmasQuote(price,19500,initial,begin,GODO_CHRISTMAS_END),19500);
+ assert.equal(godoChristmasQuote(price,19500,initial,begin,begin-1),19500);
 });
