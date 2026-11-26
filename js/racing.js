@@ -418,26 +418,34 @@ export function validHorseName(name){
  if(value.length<1||value.length>12||/[\u0000-\u001f@#`*_~<>|\\/:]/.test(value)||/https?|www\./i.test(value))throw Error('馬の名前は1〜12文字で、記号やURLは使えません');
  return value;
 }
-/** Independent JST-day limits. Legacy aggregate counts are conservatively
- * retained until the server reconstructs the actual categories from receipts. */
+/** Only ordinary competitive directives have a daily issuance limit.
+ * Preserve all category counts for receipts and migrate old counters conservatively. */
 export function exchangeDay(now){return new Date(now+JST).toISOString().slice(0,10);}
-const exchangeLabels={directive:'指令の発行',horse:'馬主ボックスの購入',luxury:'超高級品の購入'};
-const exchangeCount=value=>Number.isSafeInteger(value)&&value>=0?Math.min(value,DAILY_EXCHANGES):0;
+const exchangeLabels={directive:'コンペの指令',horse:'馬主ボックスの購入',luxury:'超高級品の購入'};
+const exchangeCount=value=>Number.isSafeInteger(value)&&value>=0?value:0;
 export function exchangeCounts(state,now){
  const old=state.exchange,day=exchangeDay(now);
- const legacy=old?.day===day?exchangeCount(old.count):0;
+ const legacy=old?.day===day?Math.min(exchangeCount(old.count),DAILY_EXCHANGES):0;
  return Object.fromEntries(Object.keys(exchangeLabels).map(key=>[key,old?.day===day&&old.byCategory?exchangeCount(old.byCategory[key]):legacy]));
 }
-export function exchangeRemaining(state,now,category){
- if(!Object.hasOwn(exchangeLabels,category))throw Error('交換の種類が不正です。');
- return DAILY_EXCHANGES-exchangeCounts(state,now)[category];
+function competitiveCount(state,now){
+ const old=state.exchange;
+ return old?.day===exchangeDay(now)?Math.min(DAILY_EXCHANGES,Number.isSafeInteger(old.competitiveCount)&&old.competitiveCount>=0?old.competitiveCount:exchangeCounts(state,now).directive):0;
 }
-export function useExchange(state,now,category){
+export function exchangeRemaining(state,now,category,task='competitive'){
+ if(!Object.hasOwn(exchangeLabels,category))throw Error('交換の種類が不正です。');
+ return category==='directive'&&task==='competitive'?DAILY_EXCHANGES-competitiveCount(state,now):Infinity;
+}
+export function useExchange(state,now,category,task='competitive'){
  if(!Object.hasOwn(exchangeLabels,category))throw Error('交換の種類が不正です。');
  const byCategory=exchangeCounts(state,now);
- if(byCategory[category]>=DAILY_EXCHANGES)throw Error(`${exchangeLabels[category]}は1日${DAILY_EXCHANGES}回までです（午前0時に戻ります）`);
+ let count=competitiveCount(state,now);
+ if(category==='directive'&&task==='competitive'){
+  if(count>=DAILY_EXCHANGES)throw Error(`${exchangeLabels[category]}は1日${DAILY_EXCHANGES}回までです（午前0時に戻ります）`);
+  count++;
+ }
  byCategory[category]++;
- state.exchange={day:exchangeDay(now),count:Object.values(byCategory).reduce((sum,n)=>sum+n,0),byCategory};
+ state.exchange={day:exchangeDay(now),count:Object.values(byCategory).reduce((sum,n)=>sum+n,0),byCategory,competitiveCount:count};
 }
 /** A nickname from a horse's record. `runs` are newest first: {rank, winOdds (tenths), favourite}. */
 export function horseNickname({wins=0,seconds=0},runs=[]){
