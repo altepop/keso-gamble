@@ -23,3 +23,14 @@ export async function ensureNotificationReadIndexes(db:D1Database):Promise<void>
  ready.set(db,job);
  try{await job;}catch(e){ready.delete(db);throw e;}
 }
+
+/** The duplicate check consumes only the current player's (riot, match)
+ * keys. Read that player's indexed receipts, not every participant of each
+ * shared match. Each player's page is still read fresh, including late posts. */
+export async function prefetchPlayerNotices(db:D1Database,riotId:string,ids:readonly string[],saved:Set<string>){
+ const unique=[...new Set(ids)];
+ if(!unique.length)return;
+ const rows=await db.prepare(`SELECT riot_id,match_id FROM notifications WHERE riot_id=? AND match_id IN (${unique.map(()=>'?').join(',')})`)
+  .bind(riotId,...unique).all<{riot_id:string;match_id:string}>();
+ for(const r of rows.results)saved.add(JSON.stringify([r.riot_id,r.match_id]));
+}

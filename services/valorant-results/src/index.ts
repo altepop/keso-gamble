@@ -28,7 +28,7 @@ import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
 import {queueVdkLossPress} from './vdk-bankruptcy-loss-press.ts';
 import {queueSteamPosts} from './steam-posts.ts';
-import {ensureNotificationReadIndexes} from './notification-indexes.ts';
+import {ensureNotificationReadIndexes,prefetchPlayerNotices} from './notification-indexes.ts';
 import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
 import {cleanupMonitorData} from './monitor-cleanup.ts';
@@ -577,8 +577,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         }
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
         const ids = matches.map(m => m?.metadata?.match_id).filter((id): id is string => typeof id === 'string');
-        if (ids.length) for (const r of (await env.DB.prepare(`SELECT riot_id,match_id FROM notifications WHERE match_id IN (${ids.map(() => '?').join(',')})`)
-          .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
+        await prefetchPlayerNotices(env.DB,player.riotId,ids,saved);
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
           if(coachEvidenceBudget>0){
