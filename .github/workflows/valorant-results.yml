@@ -210,6 +210,10 @@ jobs:
       - run: npm ci
       - name: Refresh Activity cache versions for browser tests
         run: npm run build:activity
+      - name: Trust only this checkout for historical browser fixtures
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git cat-file -e '0bbf0af:index.html'
       - name: Verify pinned Playwright and preinstalled Chromium and WebKit
         timeout-minutes: 5
         run: |
