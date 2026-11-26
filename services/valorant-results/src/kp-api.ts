@@ -66,6 +66,7 @@ import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, crypto
 // @ts-expect-error Shared pure browser module.
 import { hydrateMoreCasino, minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from '../../../js/casino-more.js';
 import {jackpotOf} from './casino-jackpot.ts';
+import {slotLegendPlan,slotLegendRng,slotMusicTrack,SLOT_BOOST_MAX_STAKE} from './slot-legends.ts';
 import { enqueue, ensurePosts } from './racing-posts.ts';
 import {transcendentGodPullPost} from './relic-god-pull.ts';
 // @ts-expect-error Shared browser engine.
@@ -215,6 +216,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
  if(ownerRound&&!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
  const requestHash=await kpHash(JSON.stringify({action:sourceAction,args}));
  const sourceArgs=args;
+ let slotPlan:ReturnType<typeof slotLegendPlan>|undefined;
  for(let attempt=0;attempt<4;attempt++){
   action=sourceAction;args=sourceArgs;
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
@@ -267,7 +269,15 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='mines-start')result=minesStart(state,args.amount,args.mines);
   else if(action==='mines-pick')result=minesPick(state,args.cell,cryptoInt);
   else if(action==='mines-cashout')result=minesCashout(state,cryptoInt);
-  else if(action==='slot')result=playSlot(state,args.amount,cryptoInt,{amount:state.jackpot.amount,version:state.jackpot.version});
+  else if(action==='slot'){
+   if(!slotPlan){
+    const amount=args.amount;
+    const eligible=typeof amount==='number'&&Number.isSafeInteger(amount)&&amount>=100&&amount<=SLOT_BOOST_MAX_STAKE&&state.cash>=amount;
+    const track=eligible?await slotMusicTrack(env,mapping.guildId):null;
+    slotPlan=slotLegendPlan(track,Date.now(),amount);
+   }
+   result=playSlot(state,args.amount,slotLegendRng(cryptoInt,slotPlan),{amount:state.jackpot.amount,version:state.jackpot.version});
+  }
   else if(action==='vp-deal')result=vpDeal(state,args.amount,cryptoInt);
   else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
   else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);

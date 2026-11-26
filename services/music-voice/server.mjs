@@ -90,8 +90,13 @@ const server=createServer(async(req,res)=>{
  if(req.method==='GET'&&path==='/health'){
   takeStateHint(req);
   const ready=music.health().ready&&(!stateOrigin||restored);
+  const query=new URL(req.url??'/', 'http://localhost').searchParams;
+  const token=String(req.headers.authorization??'').replace(/^Bearer /,'');
+  const allowed=ready&&configured&&equal(token,MUSIC_BRIDGE_TOKEN)&&query.get('slotGuild')===MUSIC_GUILD_ID;
+  const snapshot=allowed?music.snapshot(MUSIC_GUILD_ID):null;
+  const slotTrack=snapshot?.state==='playing'&&!snapshot.paused&&snapshot.volume>0?snapshot.current?.id??null:null;
   return reply(res,200,{status:!configured?'configuration_required':ready?'ready':'starting',
-    active:music.health().active});
+    active:music.health().active,...(allowed?{slotTrack}:{})});
  }
  // The only duel voice endpoint. Worker-to-Node service credential must match
  // the existing private music bridge. This never joins an unoccupied VC.
