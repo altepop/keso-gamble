@@ -38,6 +38,7 @@ on:
       - 'scripts/*browser-check.cjs'
       - 'scripts/ci-browser-lanes.mjs'
       - 'scripts/race-video/**'
+      - 'scripts/ci-check-overlap.sh'
       - '.github/workflows/race-video.yml'
   push:
     branches: [main]
@@ -68,6 +69,7 @@ on:
       - 'scripts/*browser-check.cjs'
       - 'scripts/ci-browser-lanes.mjs'
       - 'scripts/race-video/**'
+      - 'scripts/ci-check-overlap.sh'
       - '.github/workflows/race-video.yml'
   workflow_dispatch:
 permissions:
@@ -125,7 +127,9 @@ jobs:
           python3 -m venv .venv-mahjong
           .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
           echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
-      - run: npm run check
+      - name: Check Worker and prepare offline race video concurrently
+        working-directory: .
+        run: bash scripts/ci-check-overlap.sh
       - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
         working-directory: .
         run: node --test test/duel-p12-824-read-evidence.test.mjs
@@ -174,10 +178,9 @@ jobs:
       - name: Test deploy smoke protocol (mocked endpoints)
         working-directory: .
         run: node --test scripts/post-deploy-smoke.test.mjs
-      - name: Prepare race video verification
-        timeout-minutes: 5
+      - name: Publish isolated video environment only for the render
         working-directory: .
-        run: bash scripts/race-video/prepare.sh
+        run: cat "$RUNNER_TEMP/keso-video-prepare.env" >> "$GITHUB_ENV"
       - name: Render a fixture replay (no Discord delivery)
         working-directory: .
         run: node scripts/race-video/run.mjs --check
