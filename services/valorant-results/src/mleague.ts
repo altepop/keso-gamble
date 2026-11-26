@@ -137,6 +137,24 @@ export async function mlData(env:KpEnv):Promise<MlView>{
  const promise=entry.promise;
  try{return await promise;}catch(error){if(mlViewCache.get(env.DB)?.promise===promise)mlViewCache.delete(env.DB);throw error;}
 }
+/** Internal date-scoped view for cron consumers. Public full-season views retain
+ * their existing cache. The date prefix of the existing primary key bounds each
+ * read; include every fixture on each requested date to preserve official matching. */
+export async function mlDataForDates(env:KpEnv,dates:readonly string[]):Promise<MlView>{
+ const wanted=new Set(dates);
+ const fixtures=data.fixtures.filter(f=>wanted.has(f.date));
+ if(!fixtures.length)return {teams:data.teams,fixtures:[]};
+ await ensureMl(env);
+ const keys=[...new Set(fixtures.map(f=>f.date))];
+ const official=new Map<string,string[]>();
+ for(let i=0;i<keys.length;i+=50){
+  const chunk=keys.slice(i,i+50);
+  const rows=(await env.DB.prepare(`SELECT date,tbl,teams FROM ml_cards WHERE date IN (${chunk.map(()=>'?').join(',')})`)
+   .bind(...chunk).all<{date:string;tbl:number;teams:string}>()).results;
+  for(const c of rows)official.set(c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]);
+ }
+ return {teams:data.teams,fixtures:fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
+}
 const monthPage=(y:number,m:number)=>`https://m-league.jp/games/?mlm=${m}&mly=${y}`;
 async function fetchMonth(env:KpEnv,y:number,m:number,now:number,request:typeof fetch){
  const response=await request(monthPage(y,m),{headers:{'User-Agent':'KESO PLAY results (private Discord bot)'},signal:AbortSignal.timeout(15000)});
@@ -147,7 +165,8 @@ async function fetchMonth(env:KpEnv,y:number,m:number,now:number,request:typeof 
 }
 /** Reads the official calendar when today's or tomorrow's cards are not stored yet (at most every 30 minutes). */
 export async function refreshMlCards(env:KpEnv,now=Date.now(),request:typeof fetch=fetch){
- const d=await mlData(env),days=[0,1].map(k=>new Date(now+9*3600000+k*86400000).toISOString().slice(0,10));
+ const days=[0,1].map(k=>new Date(now+9*3600000+k*86400000).toISOString().slice(0,10));
+ const d=await mlDataForDates(env,days);
  const missing=days.filter(day=>d.fixtures.some(f=>f.date===day&&!f.confirmed));
  if(!missing.length)return 0;
  const next=await env.DB.prepare("SELECT value FROM ml_state WHERE key='next_cards'").first<{value:string}>();
@@ -192,8 +211,9 @@ export async function unsettledMlMatches(env:KpEnv){
 /** Polls the official page every three minutes while a started game has no result. */
 export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetch=fetch){
  await ensureMl(env);
- const d0=await mlData(env),unsettled=await unsettledMlMatches(env);
- const awaited=awaitedFixtures(now,await mlResults(env),d0,unsettled);if(!awaited.length)return 0;
+ const unsettled=await unsettledMlMatches(env);
+ // The start time and fixture id depend only on the static schedule, not official teams.
+ const awaited=awaitedFixtures(now,await mlResults(env),data,unsettled);if(!awaited.length)return 0;
  const recent=awaited.some(f=>now<mlStart(f)+RESULT_WINDOW);
  const next=await env.DB.prepare("SELECT value FROM ml_state WHERE key='next_poll'").first<{value:string}>();
  if(Number(next?.value??0)>now)return 0;
@@ -202,7 +222,7 @@ export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetc
  for(const month of new Set(awaited.map(f=>f.date.slice(0,7)))){
   const [y,m]=month.split('-').map(Number);
   const html=await fetchMonth(env,y,m,now,request);if(html===null)continue;
-  const d=await mlData(env);
+  const d=await mlDataForDates(env,awaited.filter(f=>f.date.startsWith(month)).map(f=>f.date));
   for(const r of parseOfficialResults(html)){
    const fixture=matchFixture(r,d);if(!fixture||!awaited.some(f=>f.id===fixture.id))continue;
    const done=await env.DB.prepare('INSERT OR IGNORE INTO ml_results(match,names,points,at) VALUES(?,?,?,?)').bind(fixture.id,JSON.stringify(r.names),JSON.stringify(r.points),now).run();
@@ -256,8 +276,11 @@ export async function mlLineupTimes(env:KpEnv){
  * feed every two minutes, stores exact matches and announces them with the predictions on that game. */
 export async function pollMlLineups(env:PostEnv,mapping:KpMapping,now=Date.now(),request:typeof fetch=fetch){
  await ensureMl(env);
- const known=await mlLineups(env),results=await mlResults(env),d=await mlData(env);
- const awaited=d.fixtures.filter(f=>f.confirmed&&mlStart(f)<=now&&now<mlStart(f)+5*3600000&&!known.has(f.id)&&!results.has(f.id));
+ const known=await mlLineups(env),results=await mlResults(env);
+ const candidates=data.fixtures.filter(f=>mlStart(f)<=now&&now<mlStart(f)+5*3600000&&!known.has(f.id)&&!results.has(f.id));
+ if(!candidates.length)return 0;
+ const d=await mlDataForDates(env,candidates.map(f=>f.date));
+ const awaited=d.fixtures.filter(f=>f.confirmed&&candidates.some(c=>c.id===f.id));
  if(!awaited.length)return 0;
  const next=await env.DB.prepare("SELECT value FROM ml_state WHERE key='next_lineups'").first<{value:string}>();
  if(Number(next?.value??0)>now)return 0;
@@ -345,7 +368,11 @@ export function resultPost(f:Fixture,r:MlResult,bets:Array<MlBet&{user:string}>)
 export async function queueMlPosts(env:PostEnv,mapping:KpMapping,now=Date.now()){
  if(!earningsWebhook(env))return;
  await ensureMl(env);await ensurePosts(env);
- const results=await mlResults(env),today=new Date(now+9*3600000).toISOString().slice(0,10),d=await mlData(env);
+ const results=await mlResults(env),today=new Date(now+9*3600000).toISOString().slice(0,10);
+ const cardDay=data.fixtures.filter(f=>f.date===today);
+ const postCard=cardDay.length>0&&now>=mlStart(cardDay[0])-3600000&&now<mlStart(cardDay[0]);
+ const resultCandidates=data.fixtures.filter(x=>results.has(x.id)&&now<Math.max(mlStart(x)+RESULT_WINDOW*2,results.get(x.id)!.at+RESULT_WINDOW));
+ const d=await mlDataForDates(env,[...(postCard?[today]:[]),...resultCandidates.map(f=>f.date)]);
  const day=d.fixtures.filter(f=>f.date===today);
  // The card goes out only with the official matchups.
  if(day.length&&day.every(f=>f.confirmed)&&now>=mlStart(day[0])-3600000&&now<mlStart(day[0]))await enqueue(env,'ml-card:'+today,cardPost(day,results,d),now);
