@@ -86,6 +86,19 @@ async function postponeCandidate(db:D1Database,id:string,now:number,status:'pend
   .bind(status,status,now+delay,id).run();
 }
 
+/** Use bound composite-key seeks, avoiding the temporary JSON input scan.
+ * Chunk only to bound SQL parameters; do not truncate an upstream page. */
+export async function knownCoachMemberMatchIds(db:D1Database,riotId:string,matchIds:readonly string[]){
+ const unique=[...new Set(matchIds)],known=new Set<string>();
+ for(let i=0;i<unique.length;i+=50){
+  const chunk=unique.slice(i,i+50);
+  const rows=(await db.prepare(`SELECT match_id FROM coach_member_links WHERE riot_id=? AND match_id IN (${chunk.map(()=>'?').join(',')})`)
+   .bind(riotId,...chunk).all<{match_id:string}>()).results;
+  for(const row of rows)known.add(row.match_id);
+ }
+ return known;
+}
+
 export async function discoverCoachMemberPage(db:D1Database,
  account:(riotId:string)=>Promise<Account>,
  lifetime:(region:string,puuid:string,page:number,size:number)=>Promise<unknown>,
@@ -134,9 +147,8 @@ export async function discoverCoachMemberPage(db:D1Database,
   // the same game. Preserve every source-to-match link for coverage auditing.
   let newMatches=discovered;
   if(refresh&&discovered.length){
-   const known=await db.prepare("SELECT match_id FROM coach_member_links WHERE riot_id=? AND match_id IN (SELECT json_extract(value,'$.id') FROM json_each(?))")
-    .bind(source.riot_id,JSON.stringify(discovered)).all<{match_id:string}>();
-   const ids=new Set(known.results.map(r=>r.match_id));newMatches=discovered.filter(m=>!ids.has(m.id));
+   const ids=await knownCoachMemberMatchIds(db,source.riot_id,discovered.map(m=>m.id));
+   newMatches=discovered.filter(m=>!ids.has(m.id));
   }
   if(newMatches.length){
    const payload=JSON.stringify(newMatches);
