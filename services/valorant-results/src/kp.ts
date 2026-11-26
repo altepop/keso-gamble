@@ -413,10 +413,8 @@ export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.de
  LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid
  LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match
  WHERE e.id=? AND e.guild=? LIMIT 1`;
-export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
- if(run.loaded.has(id))return;
- const row=await env.DB.prepare(KP_RUN_MATCH_SQL)
-  .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null;mode:string;policy:string;power_done:number}>();
+type KpRunMatchRow={event_id:string;amount:number;relic:number;message:string|null;note:string|null;mode:string;policy:string;power_done:number};
+function recordKpRunMatch(run:KpRun,id:string,row:KpRunMatchRow|null){
  if(row){
   if(row.mode==='escalation'&&row.policy===ESCALATION_RATING_POLICY&&!row.power_done)run.pendingPower?.add(id);
   run.credits.set(id,row.amount);
@@ -425,4 +423,25 @@ export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void
   run.notes?.set(id,row.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(row.message??'')?.[1]??''));
  }
  run.loaded.add(id);
+}
+/** Fetch every requested match from fresh durable state once per cron, using one
+ * indexed SQL call per bounded group instead of one call per historic match.
+ * No cross-cron TTL: late ledger and notification edits remain visible. */
+export async function preloadKpRunMatches(env:KpEnv,run:KpRun,ids:readonly string[]):Promise<void>{
+ const pending=[...new Set(ids)].filter(id=>!run.loaded.has(id));
+ for(let offset=0;offset<pending.length;offset+=50){
+  const chunk=pending.slice(offset,offset+50);
+  const sql=KP_RUN_MATCH_SQL.replace('SELECT e.amount+','SELECT e.id AS event_id,e.amount+')
+   .replace('WHERE e.id=? AND e.guild=? LIMIT 1',
+    `WHERE e.id IN (${chunk.map(()=>'?').join(',')}) AND e.guild=?`);
+  const rows=(await env.DB.prepare(sql).bind(...chunk,run.mapping.guildId).all<KpRunMatchRow>()).results;
+  const found=new Map(rows.map(row=>[row.event_id,row]));
+  for(const id of chunk)recordKpRunMatch(run,id,found.get(id)??null);
+ }
+}
+export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
+ if(run.loaded.has(id))return;
+ const row=await env.DB.prepare(KP_RUN_MATCH_SQL)
+  .bind(id,run.mapping.guildId).first<Omit<KpRunMatchRow,'event_id'>>();
+ recordKpRunMatch(run,id,row?{...row,event_id:id}:null);
 }

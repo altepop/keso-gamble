@@ -64,7 +64,7 @@ import {archivePreviousDuelSeason,shouldArchiveDuelSeason} from './duel-season-a
 import {shouldRunDuelDailyAudit} from './duel-season.ts';
 import type { KpRun } from './kp.ts';
 import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, preloadKpRunMatches, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { raceSeed,settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
@@ -560,6 +560,21 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         stage = 'match_history';
         const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
         if (!Array.isArray(matches)) throw new Error('Invalid matches');
+        // Each cron observes fresh ledger/notice state. Batch only the match IDs
+        // returned by this poll; never reuse a snapshot across cron invocations.
+        if(kpRun){
+          const ids=new Set<string>();
+          for(const match of matches){
+            if(!match?.metadata?.match_id||Date.parse(match.metadata.started_at)<kpRun.startsAt)continue;
+            for(const linked of kpRun.mapping.accounts){
+              const linkedAccount=accounts.get(linked.riotId);
+              if(linkedAccount&&match.players?.some(member=>member.puuid===linkedAccount.puuid))
+                ids.add(kpEventId(kpRun.mapping.guildId,match.metadata.match_id,linkedAccount.puuid));
+            }
+          }
+          try{await preloadKpRunMatches(env,kpRun,[...ids]);}
+          catch{console.warn('kp_batch_read_pending');}
+        }
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
         const ids = matches.map(m => m?.metadata?.match_id).filter((id): id is string => typeof id === 'string');
         if (ids.length) for (const r of (await env.DB.prepare(`SELECT riot_id,match_id FROM notifications WHERE match_id IN (${ids.map(() => '?').join(',')})`)
