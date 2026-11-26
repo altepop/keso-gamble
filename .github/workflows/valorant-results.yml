@@ -157,6 +157,29 @@ jobs:
           GITHUB_ENV="$RUNNER_TEMP/keso-video-benchmark-warm.env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh
           prep_end=$SECONDS
           printf 'CI_CHECK_SEQUENTIAL_WARM check_seconds=%s prep_seconds=%s wall_seconds=%s\n' "$((check_end-overlap_end))" "$((prep_end-check_end))" "$((prep_end-overlap_end))"
+      - name: Same-run ABBA order reversal for PR 907 (read-only benchmark)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 907
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # Four warmed same-run observations, reversing the phase order. The
+          # runner, code, dependencies and limits are identical. No extra runner.
+          serial() {
+            local a=$SECONDS
+            (cd services/valorant-results && npm run check)
+            local b=$SECONDS
+            GITHUB_ENV="$RUNNER_TEMP/keso-video-abba-$1.env" timeout --kill-after=10s 300s bash scripts/race-video/prepare.sh
+            printf 'CI_ABBA mode=serial pair=%s check_seconds=%s prep_seconds=%s wall_seconds=%s\\n' "$1" "$((b-a))" "$((SECONDS-b))" "$((SECONDS-a))"
+          }
+          parallel() {
+            local a=$SECONDS
+            bash scripts/ci-check-overlap.sh
+            printf 'CI_ABBA mode=parallel pair=%s wall_seconds=%s\\n' "$1" "$((SECONDS-a))"
+          }
+          serial 1
+          parallel 1
+          parallel 2
+          serial 2
       - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
         working-directory: .
         run: node --test test/duel-p12-824-read-evidence.test.mjs
