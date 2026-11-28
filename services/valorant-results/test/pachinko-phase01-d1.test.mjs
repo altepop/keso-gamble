@@ -11,7 +11,6 @@ const accounts = Array.from({length: 10}, (_, index) => ({
   riotId: 'Fixture' + index + '#JP1',
   discordUserId: String(100000000000000101n + BigInt(index)),
 }));
-const mapping = {guildId: guild, accounts};
 const identifier = value => '"' + value.replaceAll('"', '""') + '"';
 
 async function migrateFixture(db) {
@@ -92,23 +91,31 @@ test('Phase 01 isolated D1 baseline for casino settlement, replay and wallet sta
     try {
       const db = await runtime.getD1Database('DB', 'pachinko-phase01-baseline');
       await migrateFixture(db);
-      const fixtureMapping = {...mapping, accounts: accounts.slice(0, size)};
-      for (const [index, account] of fixtureMapping.accounts.entries()) {
+      const selected = accounts.slice(0, size);
+      // Live mappings allow at most five accounts. Use two valid guilds on
+      // the same database for the ten-user case.
+      const mappings = size === 1
+        ? [{guildId: guild, accounts: selected}]
+        : [{guildId: guild, accounts: selected.slice(0, 5)},
+           {guildId: '100000000000000200', accounts: selected.slice(5)}];
+      for (const [index, account] of selected.entries()) {
         await db.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind(account.riotId, 'fixture-' + index, 'ap', 0).run();
       }
       const setup = {DB: db, KP_BOOTSTRAP_PRIVATE_KEY: 'fixture-only'};
-      assert.ok(await initializeKp(setup, fixtureMapping));
-      await syncKpAccounts(setup, fixtureMapping);
-      for (const account of fixtureMapping.accounts) {
-        await db.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,'baseline-fixture',0)").bind('fund-' + account.discordUserId, guild, account.discordUserId, 20000).run();
+      for (const mapping of mappings) {
+        assert.ok(await initializeKp(setup, mapping));
+        await syncKpAccounts(setup, mapping);
+        for (const account of mapping.accounts) {
+          await db.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,'baseline-fixture',0)").bind('fund-' + account.discordUserId, mapping.guildId, account.discordUserId, 20000).run();
+        }
       }
 
-      // Keep one stable DB adapter for each synthetic participant so isolate
-      // caches survive repeated operations, without mixing per-user counters.
-      const users = fixtureMapping.accounts.map(account => {
+      // Keep each synthetic participant's adapter stable so repeated
+      // operations reuse its caches without mixing concurrent counters.
+      const users = mappings.flatMap(mapping => mapping.accounts.map(account => {
         const totals = {statements: 0, rowsRead: 0, rowsWritten: 0};
-        return {id: account.discordUserId, totals, env: {...setup, DB: measuredDatabase(db, totals)}};
-      });
+        return {id: account.discordUserId, mapping, totals, env: {...setup, DB: measuredDatabase(db, totals)}};
+      }));
       const results = {};
       async function measure(name, action) {
         const samples = await Promise.all(users.map(async user => {
@@ -120,9 +127,9 @@ test('Phase 01 isolated D1 baseline for casino settlement, replay and wallet sta
         results[name] = aggregate(samples);
         return samples.map(sample => sample.value);
       }
-      const operation = (user, action, args) => operateKp(user.env, fixtureMapping, user.id, operationId(action, user.id), action, args);
-      await measure('initialState', user => readKpState(user.env, fixtureMapping, user.id));
-      await measure('warmState', user => readKpState(user.env, fixtureMapping, user.id));
+      const operation = (user, action, args) => operateKp(user.env, user.mapping, user.id, operationId(action, user.id), action, args);
+      await measure('initialState', user => readKpState(user.env, user.mapping, user.id));
+      await measure('warmState', user => readKpState(user.env, user.mapping, user.id));
       const first = await measure('chinchiro', user => operation(user, 'chinchiro', {amount: 100}));
       const replay = await measure('chinchiroReplay', user => operation(user, 'chinchiro', {amount: 100}));
       assert.deepEqual(replay, first);
@@ -131,11 +138,11 @@ test('Phase 01 isolated D1 baseline for casino settlement, replay and wallet sta
       // Start each cashout from the same eligible state. This fixture write
       // stands in for one successful pick and is excluded from all measurements.
       for (const user of users) {
-        await db.prepare("UPDATE kp_state SET data=json_set(data,'$.mines.opened',json('[12]')) WHERE guild=? AND user=?").bind(guild, user.id).run();
+        await db.prepare("UPDATE kp_state SET data=json_set(data,'$.mines.opened',json('[12]')) WHERE guild=? AND user=?").bind(user.mapping.guildId, user.id).run();
       }
       await measure('minesCashout', user => operation(user, 'mines-cashout', {}));
-      await measure('stateAfterSettlement', user => readKpState(user.env, fixtureMapping, user.id));
-      const actual = await db.prepare('SELECT COUNT(*) AS n FROM kp_operations WHERE guild=?').bind(guild).first('n');
+      await measure('stateAfterSettlement', user => readKpState(user.env, user.mapping, user.id));
+      const actual = await db.prepare('SELECT COUNT(*) AS n FROM kp_operations').first('n');
       assert.equal(actual, size * 3);
       console.log('PACHINKO_PHASE01_D1 ' + JSON.stringify({users: size, results}));
     } finally {
