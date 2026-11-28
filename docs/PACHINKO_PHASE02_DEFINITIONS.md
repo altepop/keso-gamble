@@ -15,4 +15,4 @@
 
 セッションは4定義のIDと版を保持する前提です。カタログから一致する版を解決し、存在しない旧版と版の混在を明示的に拒否します。内容を変更する場合は定義の版を上げます。将来のschema改訂では既存の検証器と定義を残すか、互換性を検証した移行を用意します。ここで検証する旧版復元の範囲は、静的定義の再取得です。
 
-検証は `node --test tests/pachinko-definitions.test.js` です。既存画面、Worker、KP、D1の本番コードに接続する変更は後続フェーズで扱います。
+検証は `node --test services/valorant-results/test/pachinko-definitions.test.mjs` です。既存画面、Worker、KP、D1の本番コードに接続する変更は後続フェーズで扱います。

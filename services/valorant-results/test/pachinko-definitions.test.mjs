@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createDefinitionCatalogue, validateDefinitionBundle} from '../js/pachinko/definitions.js';
+import {createDefinitionCatalogue, validateDefinitionBundle} from '../../../js/pachinko/definitions.js';
 
 const fixture = () => Object.fromEntries(['machine', 'board', 'effects', 'assets'].map(kind => [
-  kind, JSON.parse(readFileSync(new URL('./fixtures/pachinko/' + kind + '.json', import.meta.url), 'utf8')),
+  kind, JSON.parse(readFileSync(new URL('../../../tests/fixtures/pachinko/' + kind + '.json', import.meta.url), 'utf8')),
 ]));
 const refs = bundle => Object.fromEntries(Object.entries(bundle).map(([kind, value]) => [kind, {id: value.id, version: value.version}]));
 
