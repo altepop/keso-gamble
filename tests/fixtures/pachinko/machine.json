@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-machine",
+  "version": 1,
+  "displayName": "Phase 02 確認用",
+  "board": {
+    "id": "fixture-board",
+    "version": 1
+  },
+  "effects": {
+    "id": "fixture-effects",
+    "version": 1
+  },
+  "assets": {
+    "id": "fixture-assets",
+    "version": 1
+  },
+  "status": "fixture",
+  "lottery": {
+    "normal": {
+      "numerator": 1,
+      "denominator": 10
+    },
+    "high": {
+      "numerator": 1,
+      "denominator": 5
+    },
+    "rushEntry": {
+      "numerator": 1,
+      "denominator": 2
+    },
+    "stSpins": 5,
+    "timeShortSpins": 5,
+    "normalHoldLimit": 4,
+    "rightHoldLimit": 4,
+    "rounds": 2,
+    "roundTimeMs": 5000,
+    "roundEntryLimit": 3
+  },
+  "economy": {
+    "loanKp": 10,
+    "ballsPerLoan": 10,
+    "kpPerBall": {
+      "numerator": 1,
+      "denominator": 2
+    },
+    "loanLimit": 2,
+    "sessionLossLimitKp": 20,
+    "sessionTimeMs": 120000,
+    "maxBalls": 100,
+    "rounding": "floor"
+  }
+}

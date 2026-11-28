@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-effects",
+  "version": 1,
+  "targets": [
+    "display",
+    "cabinet"
+  ],
+  "entries": [
+    {
+      "id": "settled",
+      "resultClasses": [
+        "settled"
+      ],
+      "durationMs": 1000,
+      "assetIds": [],
+      "fallbackId": "settled-text",
+      "tracks": [
+        {
+          "target": "display",
+          "property": "opacity",
+          "keyframes": [
+            {
+              "atMs": 0,
+              "value": 0,
+              "ease": "linear"
+            },
+            {
+              "atMs": 1000,
+              "value": 1000,
+              "ease": "linear"
+            }
+          ]
+        }
+      ],
+      "accessibleLabel": "確定収支を表示します。"
+    },
+    {
+      "id": "settled-text",
+      "resultClasses": [
+        "settled"
+      ],
+      "durationMs": 0,
+      "assetIds": [],
+      "fallbackId": null,
+      "tracks": [],
+      "accessibleLabel": "確定収支を文字で表示します。"
+    }
+  ]
+}
