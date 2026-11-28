@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-board",
+  "version": 1,
+  "widthUm": 450000,
+  "heightUm": 500000,
+  "coordinates": "top-left-x-right-y-down",
+  "physics": {
+    "stepUs": 10000,
+    "ballRadiusUm": 5500,
+    "maxActiveBalls": 16,
+    "maxLifetimeMs": 15000,
+    "inputSteps": 101
+  },
+  "launch": {
+    "left": {
+      "xUm": 10000,
+      "yUm": 350000
+    },
+    "right": {
+      "xUm": 440000,
+      "yUm": 350000
+    }
+  },
+  "pins": [
+    {
+      "id": "pin-a",
+      "center": {
+        "xUm": 220000,
+        "yUm": 250000
+      },
+      "radiusUm": 1500
+    }
+  ],
+  "rails": [
+    {
+      "id": "rail-a",
+      "points": [
+        {
+          "xUm": 8000,
+          "yUm": 350000
+        },
+        {
+          "xUm": 18000,
+          "yUm": 100000
+        }
+      ]
+    }
+  ],
+  "windmills": [
+    {
+      "id": "wheel-a",
+      "center": {
+        "xUm": 120000,
+        "yUm": 230000
+      },
+      "radiusUm": 20000
+    }
+  ],
+  "pockets": [
+    {
+      "id": "starter",
+      "type": "starter",
+      "center": {
+        "xUm": 215000,
+        "yUm": 410000
+      },
+      "payoutBalls": 1
+    },
+    {
+      "id": "general",
+      "type": "general",
+      "center": {
+        "xUm": 165000,
+        "yUm": 395000
+      },
+      "payoutBalls": 3
+    },
+    {
+      "id": "attacker",
+      "type": "attacker",
+      "center": {
+        "xUm": 305000,
+        "yUm": 425000
+      },
+      "payoutBalls": 5
+    },
+    {
+      "id": "drain",
+      "type": "drain",
+      "center": {
+        "xUm": 225000,
+        "yUm": 485000
+      },
+      "payoutBalls": 0
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate-a",
+      "pocketId": "attacker",
+      "openMs": 3500
+    }
+  ]
+}
